@@ -1,0 +1,112 @@
+# ============================================================
+# Maven
+# ============================================================
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+*.jar
+*.war
+*.ear
+*.class
+*.log
+
+# Maven wrapper binary
+.mvn/wrapper/maven-wrapper.jar
+
+# ============================================================
+# Spring Boot / Application
+# ============================================================
+application-local.properties
+application-local.yml
+application-dev.properties
+application-dev.yml
+application-prod.properties
+application-prod.yml
+
+# ============================================================
+# IntelliJ IDEA
+# ============================================================
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# ============================================================
+# Eclipse / STS
+# ============================================================
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings/
+.springBeans
+.sts4-cache/
+bin/
+
+# ============================================================
+# NetBeans
+# ============================================================
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# ============================================================
+# VS Code
+# ============================================================
+.vscode/
+
+# ============================================================
+# OS files
+# ============================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*~
+
+# ============================================================
+# Environment / Secrets
+# ============================================================
+.env
+.env.*
+*.env
+secrets.properties
+secrets.yml
+
+# ============================================================
+# Docker
+# ============================================================
+docker-compose.override.yml
+
+# ============================================================
+# Logs & temp
+# ============================================================
+logs/
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# ============================================================
+# Flyway
+# ============================================================
+# Do NOT ignore src/main/resources/db/migration — keep migrations in VCS
