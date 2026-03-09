@@ -107,6 +107,20 @@ logs/
 *.swo
 
 # ============================================================
+# Node.js — фронтенд (speed-reader-front)
+# ============================================================
+speed-reader-front/node_modules/
+speed-reader-front/dist/
+speed-reader-front/.next/
+speed-reader-front/coverage/
+speed-reader-front/.env
+speed-reader-front/.env.local
+speed-reader-front/.env.development.local
+speed-reader-front/.env.test.local
+speed-reader-front/.env.production.local
+!speed-reader-front/.env.example
+
+# ============================================================
 # Flyway
 # ============================================================
 # Do NOT ignore src/main/resources/db/migration — keep migrations in VCS
