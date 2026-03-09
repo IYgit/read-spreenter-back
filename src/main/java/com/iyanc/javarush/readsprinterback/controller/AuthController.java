@@ -6,11 +6,14 @@ import com.iyanc.javarush.readsprinterback.dto.request.RegisterRequest;
 import com.iyanc.javarush.readsprinterback.dto.response.AuthResponse;
 import com.iyanc.javarush.readsprinterback.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -42,11 +45,12 @@ public class AuthController {
 
     @GetMapping("/me")
     @Operation(summary = "Get current authenticated user info")
-    public ResponseEntity<?> me(org.springframework.security.core.Authentication authentication) {
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<UserDetails> me(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        return ResponseEntity.ok(authentication.getPrincipal());
+        return ResponseEntity.ok((UserDetails) authentication.getPrincipal());
     }
 }
 
