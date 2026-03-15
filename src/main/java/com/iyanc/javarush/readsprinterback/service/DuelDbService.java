@@ -63,6 +63,7 @@ public class DuelDbService {
 
         participantRepository.findBySessionIdAndUserId(session.getId(), user.getId())
                 .ifPresent(p -> {
+                    if (p.isFinished()) return; // already finished — do not overwrite score/durationMs
                     p.setProgress(msg.getProgress());
                     p.setErrors(msg.getErrors());
                     participantRepository.save(p);
