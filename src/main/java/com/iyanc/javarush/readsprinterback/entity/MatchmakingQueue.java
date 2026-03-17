@@ -27,6 +27,14 @@ public class MatchmakingQueue {
     @Column(name = "font_size", nullable = false)
     private int fontSize;
 
+    /** For "numbers" exercise: number of digits per round (3..8) */
+    @Column(name = "digit_count", nullable = false)
+    private int digitCount;
+
+    /** For "numbers" exercise: display time in ms (300..2000) */
+    @Column(name = "display_time", nullable = false)
+    private int displayTime;
+
     @Column(name = "joined_at", nullable = false)
     private LocalDateTime joinedAt;
 

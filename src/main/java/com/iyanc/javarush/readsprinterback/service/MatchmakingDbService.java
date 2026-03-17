@@ -22,6 +22,10 @@ import java.util.*;
 @RequiredArgsConstructor
 public class MatchmakingDbService {
 
+    private static final int NUMBERS_TOTAL_ROUNDS = 10;
+    private static final String MATCH_FOUND = "MATCH_FOUND";
+    private static final Random RANDOM = new Random();
+
     private final MatchmakingQueueRepository queueRepository;
     private final DuelSessionRepository sessionRepository;
     private final DuelParticipantRepository participantRepository;
@@ -50,54 +54,104 @@ public class MatchmakingDbService {
             MatchmakingQueue opponent = opponentOpt.get();
             queueRepository.delete(opponent);
 
-            // Determine final parameters
-            int finalGrid = Math.min(req.getGridSize(), opponent.getGridSize());
-            int finalFont = Math.max(req.getFontSize(), opponent.getFontSize());
-            String finalExercise = "schulte-table"; // only supported type currently
+            String exerciseType = req.getExerciseType();
 
-            // Generate shared number sequence
-            int[] numbers = generateShuffledNumbers(finalGrid * finalGrid);
-            String numbersJson = toJson(numbers);
+            MatchFoundMessage msgForUser;
+            MatchFoundMessage msgForOpponent;
+            DuelSession session;
 
-            // Create session
-            DuelSession session = DuelSession.builder()
-                    .exerciseType(finalExercise)
-                    .gridSize(finalGrid)
-                    .fontSize(finalFont)
-                    .numbersSequence(numbersJson)
-                    .status("WAITING")
-                    .build();
-            session = sessionRepository.save(session);
+            if ("numbers".equals(exerciseType)) {
+                // ── Numbers exercise ────────────────────────────────────────────
+                int finalDigitCount = Math.min(req.getDigitCount(), opponent.getDigitCount());
+                int finalDisplayTime = Math.max(req.getDisplayTime(), opponent.getDisplayTime());
 
-            // Create participants
-            DuelParticipant p1 = DuelParticipant.builder()
-                    .session(session).user(user).build();
-            DuelParticipant p2 = DuelParticipant.builder()
-                    .session(session).user(opponent.getUser()).build();
-            participantRepository.save(p1);
-            participantRepository.save(p2);
+                // Generate array of NUMBERS_TOTAL_ROUNDS random numbers with finalDigitCount digits
+                int[] numbers = generateRandomNumbers(finalDigitCount);
+                String numbersJson = toJson(numbers);
 
-            MatchFoundMessage msgForUser = MatchFoundMessage.builder()
-                    .type("MATCH_FOUND")
-                    .sessionId(session.getId())
-                    .opponentName(opponent.getUser().getUsername())
-                    .exerciseType(finalExercise)
-                    .gridSize(finalGrid)
-                    .fontSize(finalFont)
-                    .numbers(numbers)
-                    .totalCells(finalGrid * finalGrid)
-                    .build();
+                session = DuelSession.builder()
+                        .exerciseType(exerciseType)
+                        .gridSize(finalDigitCount)   // reuse gridSize column to store digitCount
+                        .fontSize(finalDisplayTime)  // reuse fontSize column to store displayTime
+                        .numbersSequence(numbersJson)
+                        .status("WAITING")
+                        .build();
+                session = sessionRepository.save(session);
 
-            MatchFoundMessage msgForOpponent = MatchFoundMessage.builder()
-                    .type("MATCH_FOUND")
-                    .sessionId(session.getId())
-                    .opponentName(user.getUsername())
-                    .exerciseType(finalExercise)
-                    .gridSize(finalGrid)
-                    .fontSize(finalFont)
-                    .numbers(numbers)
-                    .totalCells(finalGrid * finalGrid)
-                    .build();
+                DuelParticipant p1 = DuelParticipant.builder().session(session).user(user).build();
+                DuelParticipant p2 = DuelParticipant.builder().session(session).user(opponent.getUser()).build();
+                participantRepository.save(p1);
+                participantRepository.save(p2);
+
+                msgForUser = MatchFoundMessage.builder()
+                        .type(MATCH_FOUND)
+                        .sessionId(session.getId())
+                        .opponentName(opponent.getUser().getUsername())
+                        .exerciseType(exerciseType)
+                        .digitCount(finalDigitCount)
+                        .displayTime(finalDisplayTime)
+                        .totalRounds(NUMBERS_TOTAL_ROUNDS)
+                        .numbers(numbers)
+                        .totalCells(NUMBERS_TOTAL_ROUNDS)
+                        .build();
+
+                msgForOpponent = MatchFoundMessage.builder()
+                        .type(MATCH_FOUND)
+                        .sessionId(session.getId())
+                        .opponentName(user.getUsername())
+                        .exerciseType(exerciseType)
+                        .digitCount(finalDigitCount)
+                        .displayTime(finalDisplayTime)
+                        .totalRounds(NUMBERS_TOTAL_ROUNDS)
+                        .numbers(numbers)
+                        .totalCells(NUMBERS_TOTAL_ROUNDS)
+                        .build();
+
+            } else {
+                // ── Schulte Table exercise (default) ────────────────────────────
+                int finalGrid = Math.min(req.getGridSize(), opponent.getGridSize());
+                int finalFont = Math.max(req.getFontSize(), opponent.getFontSize());
+                String finalExercise = "schulte-table";
+
+                int[] numbers = generateShuffledNumbers(finalGrid * finalGrid);
+                String numbersJson = toJson(numbers);
+
+                session = DuelSession.builder()
+                        .exerciseType(finalExercise)
+                        .gridSize(finalGrid)
+                        .fontSize(finalFont)
+                        .numbersSequence(numbersJson)
+                        .status("WAITING")
+                        .build();
+                session = sessionRepository.save(session);
+
+                DuelParticipant p1 = DuelParticipant.builder().session(session).user(user).build();
+                DuelParticipant p2 = DuelParticipant.builder().session(session).user(opponent.getUser()).build();
+                participantRepository.save(p1);
+                participantRepository.save(p2);
+
+                msgForUser = MatchFoundMessage.builder()
+                        .type(MATCH_FOUND)
+                        .sessionId(session.getId())
+                        .opponentName(opponent.getUser().getUsername())
+                        .exerciseType(finalExercise)
+                        .gridSize(finalGrid)
+                        .fontSize(finalFont)
+                        .numbers(numbers)
+                        .totalCells(finalGrid * finalGrid)
+                        .build();
+
+                msgForOpponent = MatchFoundMessage.builder()
+                        .type(MATCH_FOUND)
+                        .sessionId(session.getId())
+                        .opponentName(user.getUsername())
+                        .exerciseType(finalExercise)
+                        .gridSize(finalGrid)
+                        .fontSize(finalFont)
+                        .numbers(numbers)
+                        .totalCells(finalGrid * finalGrid)
+                        .build();
+            }
 
             return new MatchmakingService.MatchResult(
                     session.getId(),
@@ -114,6 +168,8 @@ public class MatchmakingDbService {
                 .exerciseType(req.getExerciseType())
                 .gridSize(req.getGridSize())
                 .fontSize(req.getFontSize())
+                .digitCount(req.getDigitCount())
+                .displayTime(req.getDisplayTime())
                 .build();
         queueRepository.save(entry);
 
@@ -132,11 +188,23 @@ public class MatchmakingDbService {
         queueRepository.deleteAllByJoinedAtBefore(cutoff);
     }
 
+    /** Generates count shuffled numbers 1..count (for Schulte Table). */
     private int[] generateShuffledNumbers(int count) {
         List<Integer> list = new ArrayList<>();
         for (int i = 1; i <= count; i++) list.add(i);
         Collections.shuffle(list);
         return list.stream().mapToInt(Integer::intValue).toArray();
+    }
+
+    /** Generates NUMBERS_TOTAL_ROUNDS random numbers each having exactly digitCount digits (for Numbers exercise). */
+    private int[] generateRandomNumbers(int digitCount) {
+        int min = (int) Math.pow(10, digitCount - 1.0);
+        int max = (int) Math.pow(10, digitCount) - 1;
+        int[] result = new int[NUMBERS_TOTAL_ROUNDS];
+        for (int i = 0; i < NUMBERS_TOTAL_ROUNDS; i++) {
+            result[i] = min + RANDOM.nextInt(max - min + 1);
+        }
+        return result;
     }
 
     private String toJson(int[] arr) {

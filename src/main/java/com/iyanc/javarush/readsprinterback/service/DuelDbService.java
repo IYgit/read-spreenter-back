@@ -110,6 +110,7 @@ public class DuelDbService {
                     .opponentDurationMs(msg.getDurationMs())
                     .opponentErrors(msg.getErrors())
                     .opponentScore(msg.getScore())
+                    .opponentProgress(msg.getProgress())
                     .build();
         }
 
