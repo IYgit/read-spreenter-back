@@ -29,29 +29,12 @@ public class MatchmakingDbService {
     private static final String MATCH_FOUND = "MATCH_FOUND";
     private static final Random RANDOM = new Random();
 
-    // Ukrainian word-pair data sets (same as frontend WordPairsExercise)
-    private static final String[][] DIFF_PAIRS = {
-        {"десна","весна"},{"галант","талант"},{"арфа","фара"},
-        {"кішка","мішка"},{"лопата","робота"},{"марка","парка"},
-        {"палата","салата"},{"горіх","поріг"},{"калина","малина"},
-        {"ворон","ворог"},{"барон","вагон"},{"банка","ранка"},
-        {"сила","піла"},{"доля","воля"},{"нитка","вітка"},
-        {"крило","грило"},{"гроза","проза"},{"казка","маска"},
-        {"лимон","вагон"},{"місто","тісто"},{"кобра","добра"},
-        {"крига","книга"},{"човен","вогонь"},{"верба","герба"},
-        {"школа","скала"},{"рамка","лампа"},{"ніжка","мішка"},
-        {"кінець","вінець"},{"ложка","мошка"},{"бочка","кочка"}
-    };
-    private static final String[] SAME_WORDS = {
-        "ілюзія","вигін","музика","плаття","дзеркало","зоряний",
-        "пілот","кулон","ескімо","перлина","лавина","фонтан",
-        "медаль","океан","парасон","вулкан","магніт","орбіта"
-    };
-
     private final MatchmakingQueueRepository queueRepository;
     private final DuelSessionRepository sessionRepository;
     private final DuelParticipantRepository participantRepository;
     private final UserRepository userRepository;
+    private final WpDiffPairRepository wpDiffPairRepository;
+    private final WpSameWordRepository wpSameWordRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -262,26 +245,18 @@ public class MatchmakingDbService {
         queueRepository.deleteAllByJoinedAtBefore(cutoff);
     }
 
-    /** Generates a shuffled grid of word-pairs: ~50% different. */
+    /** Generates a shuffled grid of word-pairs from DB: ~50% different. */
     private List<WordPairDto> generateWordPairs(int totalCells) {
         int diffCount = totalCells / 2;
         int sameCount = totalCells - diffCount;
 
         List<WordPairDto> pairs = new ArrayList<>();
 
-        List<String[]> shuffledDiff = new ArrayList<>(Arrays.asList(DIFF_PAIRS));
-        Collections.shuffle(shuffledDiff, RANDOM);
-        for (int i = 0; i < diffCount; i++) {
-            String[] p = shuffledDiff.get(i % shuffledDiff.size());
-            pairs.add(new WordPairDto(p[0], p[1], true));
-        }
+        wpDiffPairRepository.findRandom(diffCount)
+                .forEach(p -> pairs.add(new WordPairDto(p.getWord1(), p.getWord2(), true)));
 
-        List<String> shuffledSame = new ArrayList<>(Arrays.asList(SAME_WORDS));
-        Collections.shuffle(shuffledSame, RANDOM);
-        for (int i = 0; i < sameCount; i++) {
-            String w = shuffledSame.get(i % shuffledSame.size());
-            pairs.add(new WordPairDto(w, w, false));
-        }
+        wpSameWordRepository.findRandom(sameCount)
+                .forEach(p -> pairs.add(new WordPairDto(p.getWord(), p.getWord(), false)));
 
         Collections.shuffle(pairs, RANDOM);
         return pairs;
