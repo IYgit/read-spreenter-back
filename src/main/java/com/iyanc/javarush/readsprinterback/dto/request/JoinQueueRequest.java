@@ -26,8 +26,8 @@ public class JoinQueueRequest {
     @Min(3) @Max(8)
     private int digitCount = 3;
 
-    /** Number display time in milliseconds (300..2000) */
-    @Min(300) @Max(2000)
+    /** Number display time in milliseconds (50..2000) */
+    @Min(50) @Max(2000)
     private int displayTime = 1000;
 }
 
