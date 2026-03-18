@@ -31,9 +31,25 @@ public class MatchmakingQueue {
     @Column(name = "digit_count", nullable = false)
     private int digitCount;
 
-    /** For "numbers" exercise: display time in ms (300..2000) */
+    /** For "numbers" exercise: display time in ms (50..2000) */
     @Column(name = "display_time", nullable = false)
     private int displayTime;
+
+    /** For "word-pairs" exercise: grid rows (3..5) */
+    @Column(name = "wp_rows", nullable = false)
+    private int wpRows;
+
+    /** For "word-pairs" exercise: grid cols (3..5) */
+    @Column(name = "wp_cols", nullable = false)
+    private int wpCols;
+
+    /** For "word-pairs" exercise: time limit in seconds (30..120) */
+    @Column(name = "wp_time_limit", nullable = false)
+    private int wpTimeLimit;
+
+    /** For "word-pairs" exercise: font size in px (12..18) */
+    @Column(name = "wp_font_size", nullable = false)
+    private int wpFontSize;
 
     @Column(name = "joined_at", nullable = false)
     private LocalDateTime joinedAt;

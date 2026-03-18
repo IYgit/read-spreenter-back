@@ -1,5 +1,8 @@
 package com.iyanc.javarush.readsprinterback.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.iyanc.javarush.readsprinterback.dto.WordPairDto;
 import com.iyanc.javarush.readsprinterback.dto.request.JoinQueueRequest;
 import com.iyanc.javarush.readsprinterback.dto.response.MatchFoundMessage;
 import com.iyanc.javarush.readsprinterback.entity.*;
@@ -26,10 +29,31 @@ public class MatchmakingDbService {
     private static final String MATCH_FOUND = "MATCH_FOUND";
     private static final Random RANDOM = new Random();
 
+    // Ukrainian word-pair data sets (same as frontend WordPairsExercise)
+    private static final String[][] DIFF_PAIRS = {
+        {"десна","весна"},{"галант","талант"},{"арфа","фара"},
+        {"кішка","мішка"},{"лопата","робота"},{"марка","парка"},
+        {"палата","салата"},{"горіх","поріг"},{"калина","малина"},
+        {"ворон","ворог"},{"барон","вагон"},{"банка","ранка"},
+        {"сила","піла"},{"доля","воля"},{"нитка","вітка"},
+        {"крило","грило"},{"гроза","проза"},{"казка","маска"},
+        {"лимон","вагон"},{"місто","тісто"},{"кобра","добра"},
+        {"крига","книга"},{"човен","вогонь"},{"верба","герба"},
+        {"школа","скала"},{"рамка","лампа"},{"ніжка","мішка"},
+        {"кінець","вінець"},{"ложка","мошка"},{"бочка","кочка"}
+    };
+    private static final String[] SAME_WORDS = {
+        "ілюзія","вигін","музика","плаття","дзеркало","зоряний",
+        "пілот","кулон","ескімо","перлина","лавина","фонтан",
+        "медаль","океан","парасон","вулкан","магніт","орбіта"
+    };
+
     private final MatchmakingQueueRepository queueRepository;
     private final DuelSessionRepository sessionRepository;
     private final DuelParticipantRepository participantRepository;
     private final UserRepository userRepository;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * All DB operations in a single transaction.
@@ -107,6 +131,52 @@ public class MatchmakingDbService {
                         .totalCells(NUMBERS_TOTAL_ROUNDS)
                         .build();
 
+            } else if ("word-pairs".equals(exerciseType)) {
+                // ── Word Pairs exercise ─────────────────────────────────────────
+                int finalRows = Math.min(req.getWpRows(), opponent.getWpRows());
+                int finalCols = Math.min(req.getWpCols(), opponent.getWpCols());
+                int finalTimeLimit = Math.max(req.getWpTimeLimit(), opponent.getWpTimeLimit());
+                int finalFontSize = Math.max(req.getWpFontSize(), opponent.getWpFontSize());
+
+                List<WordPairDto> pairsList = generateWordPairs(finalRows * finalCols);
+                int diffCount = (int) pairsList.stream().filter(WordPairDto::isDiff).count();
+                WordPairDto[] pairs = pairsList.toArray(new WordPairDto[0]);
+                String pairsJson = toJsonWordPairs(pairs);
+
+                // gridSize encodes rows*10+cols (e.g. 4 rows, 4 cols → 44)
+                // fontSize stores wpFontSize; wpTimeLimit stored in display_time (reuse)
+                session = DuelSession.builder()
+                        .exerciseType("word-pairs")
+                        .gridSize(finalRows * 10 + finalCols)
+                        .fontSize(finalFontSize)
+                        .numbersSequence(pairsJson)
+                        .status("WAITING")
+                        .build();
+                session = sessionRepository.save(session);
+
+                DuelParticipant p1 = DuelParticipant.builder().session(session).user(user).build();
+                DuelParticipant p2 = DuelParticipant.builder().session(session).user(opponent.getUser()).build();
+                participantRepository.save(p1);
+                participantRepository.save(p2);
+
+                msgForUser = MatchFoundMessage.builder()
+                        .type(MATCH_FOUND)
+                        .sessionId(session.getId())
+                        .opponentName(opponent.getUser().getUsername())
+                        .exerciseType("word-pairs")
+                        .pairs(pairs).wpRows(finalRows).wpCols(finalCols)
+                        .wpTimeLimit(finalTimeLimit).wpFontSize(finalFontSize)
+                        .totalCells(diffCount).build();
+
+                msgForOpponent = MatchFoundMessage.builder()
+                        .type(MATCH_FOUND)
+                        .sessionId(session.getId())
+                        .opponentName(user.getUsername())
+                        .exerciseType("word-pairs")
+                        .pairs(pairs).wpRows(finalRows).wpCols(finalCols)
+                        .wpTimeLimit(finalTimeLimit).wpFontSize(finalFontSize)
+                        .totalCells(diffCount).build();
+
             } else {
                 // ── Schulte Table exercise (default) ────────────────────────────
                 int finalGrid = Math.min(req.getGridSize(), opponent.getGridSize());
@@ -170,6 +240,10 @@ public class MatchmakingDbService {
                 .fontSize(req.getFontSize())
                 .digitCount(req.getDigitCount())
                 .displayTime(req.getDisplayTime())
+                .wpRows(req.getWpRows())
+                .wpCols(req.getWpCols())
+                .wpTimeLimit(req.getWpTimeLimit())
+                .wpFontSize(req.getWpFontSize())
                 .build();
         queueRepository.save(entry);
 
@@ -186,6 +260,31 @@ public class MatchmakingDbService {
     public void cleanupStaleQueueEntries() {
         java.time.LocalDateTime cutoff = java.time.LocalDateTime.now().minusMinutes(5);
         queueRepository.deleteAllByJoinedAtBefore(cutoff);
+    }
+
+    /** Generates a shuffled grid of word-pairs: ~50% different. */
+    private List<WordPairDto> generateWordPairs(int totalCells) {
+        int diffCount = totalCells / 2;
+        int sameCount = totalCells - diffCount;
+
+        List<WordPairDto> pairs = new ArrayList<>();
+
+        List<String[]> shuffledDiff = new ArrayList<>(Arrays.asList(DIFF_PAIRS));
+        Collections.shuffle(shuffledDiff, RANDOM);
+        for (int i = 0; i < diffCount; i++) {
+            String[] p = shuffledDiff.get(i % shuffledDiff.size());
+            pairs.add(new WordPairDto(p[0], p[1], true));
+        }
+
+        List<String> shuffledSame = new ArrayList<>(Arrays.asList(SAME_WORDS));
+        Collections.shuffle(shuffledSame, RANDOM);
+        for (int i = 0; i < sameCount; i++) {
+            String w = shuffledSame.get(i % shuffledSame.size());
+            pairs.add(new WordPairDto(w, w, false));
+        }
+
+        Collections.shuffle(pairs, RANDOM);
+        return pairs;
     }
 
     /** Generates count shuffled numbers 1..count (for Schulte Table). */
@@ -216,5 +315,12 @@ public class MatchmakingDbService {
         sb.append(']');
         return sb.toString();
     }
-}
 
+    private String toJsonWordPairs(WordPairDto[] pairs) {
+        try {
+            return objectMapper.writeValueAsString(pairs);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to serialize word pairs", e);
+        }
+    }
+}
