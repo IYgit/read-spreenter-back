@@ -11,6 +11,7 @@ import com.iyanc.javarush.readsprinterback.dto.request.RsvpQueueRequest;
 import com.iyanc.javarush.readsprinterback.dto.response.MatchFoundMessage;
 import com.iyanc.javarush.readsprinterback.dto.response.QuestionResponse;
 import com.iyanc.javarush.readsprinterback.entity.*;
+import com.iyanc.javarush.readsprinterback.exception.ResourceNotFoundException;
 import com.iyanc.javarush.readsprinterback.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.UncheckedIOException;
 import java.util.*;
 
 /**
@@ -31,8 +33,13 @@ import java.util.*;
 public class MatchmakingDbService {
 
     private static final int NUMBERS_TOTAL_ROUNDS = 10;
-    private static final String MATCH_FOUND = "MATCH_FOUND";
     private static final Random RANDOM = new Random();
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private static final String MATCH_FOUND = "MATCH_FOUND";
+    private static final String NUMBERS = "numbers";
+    private static final String SCHULTE_TABLE = "schulte-table";
+    private static final String WORD_PAIRS = "word-pairs";
 
     private final MatchmakingQueueRepository queueRepository;
     private final DuelSessionRepository sessionRepository;
@@ -42,7 +49,6 @@ public class MatchmakingDbService {
     private final WpSameWordRepository wpSameWordRepository;
     private final TextRepository textRepository;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * All DB operations in a single transaction.
@@ -50,247 +56,222 @@ public class MatchmakingDbService {
      */
     @Transactional
     public MatchmakingService.MatchResult tryCreateMatch(String username, JoinQueueRequest req) {
-        User user = userRepository.findByEmail(username)
-                .orElseThrow(() -> new RuntimeException("User not found: " + username));
+        User user = findAndCleanupUser(username);
+        Optional<MatchmakingQueue> opponentOpt = findOpponent(user.getId(), req.getExerciseType());
 
-        // Remove any stale entry for this user
-        queueRepository.deleteByUserId(user.getId());
-
-        // Try to find an opponent immediately
-        List<MatchmakingQueue> opponents =
-                queueRepository.findOpponents(user.getId(), req.getExerciseType(), PageRequest.of(0, 1));
-        Optional<MatchmakingQueue> opponentOpt = opponents.isEmpty()
-                ? Optional.empty()
-                : Optional.of(opponents.get(0));
-
-        if (opponentOpt.isPresent()) {
-            MatchmakingQueue opponent = opponentOpt.get();
-            queueRepository.delete(opponent);
-
-            MatchFoundMessage msgForUser;
-            MatchFoundMessage msgForOpponent;
-            DuelSession session;
-
-            if (req instanceof NumbersQueueRequest nr) {
-                // ── Numbers exercise ────────────────────────────────────────────
-                int finalDigitCount  = Math.min(nr.getDigitCount(),  opponent.getDigitCount());
-                int finalDisplayTime = Math.max(nr.getDisplayTime(), opponent.getDisplayTime());
-
-                int[] numbers = generateRandomNumbers(finalDigitCount);
-                String numbersJson = toJson(numbers);
-
-                session = DuelSession.builder()
-                        .exerciseType("numbers")
-                        .status("WAITING")
-                        .build();
-                DuelSessionParams params = DuelSessionParams.builder()
-                        .session(session)
-                        .totalCells(NUMBERS_TOTAL_ROUNDS)
-                        .digitCount(finalDigitCount)
-                        .displayTimeMs(finalDisplayTime)
-                        .numbersSequenceJson(numbersJson)
-                        .build();
-                session.setParams(params);
-                session = sessionRepository.save(session);
-
-                DuelParticipant p1 = DuelParticipant.builder().session(session).user(user).build();
-                DuelParticipant p2 = DuelParticipant.builder().session(session).user(opponent.getUser()).build();
-                participantRepository.save(p1);
-                participantRepository.save(p2);
-
-                msgForUser = MatchFoundMessage.builder()
-                        .type(MATCH_FOUND)
-                        .sessionId(session.getId())
-                        .opponentName(opponent.getUser().getUsername())
-                        .exerciseType("numbers")
-                        .digitCount(finalDigitCount)
-                        .displayTime(finalDisplayTime)
-                        .totalRounds(NUMBERS_TOTAL_ROUNDS)
-                        .numbers(numbers)
-                        .totalCells(NUMBERS_TOTAL_ROUNDS)
-                        .build();
-
-                msgForOpponent = MatchFoundMessage.builder()
-                        .type(MATCH_FOUND)
-                        .sessionId(session.getId())
-                        .opponentName(user.getUsername())
-                        .exerciseType("numbers")
-                        .digitCount(finalDigitCount)
-                        .displayTime(finalDisplayTime)
-                        .totalRounds(NUMBERS_TOTAL_ROUNDS)
-                        .numbers(numbers)
-                        .totalCells(NUMBERS_TOTAL_ROUNDS)
-                        .build();
-
-            } else if (req instanceof WordPairsQueueRequest wp) {
-                // ── Word Pairs exercise ─────────────────────────────────────────
-                int finalRows      = Math.min(wp.getWpRows(),      opponent.getWpRows());
-                int finalCols      = Math.min(wp.getWpCols(),      opponent.getWpCols());
-                int finalTimeLimit = Math.max(wp.getWpTimeLimit(), opponent.getWpTimeLimit());
-                int finalFontSize  = Math.max(wp.getWpFontSize(),  opponent.getWpFontSize());
-
-                List<WordPairDto> pairsList = generateWordPairs(finalRows * finalCols);
-                int diffCount = (int) pairsList.stream().filter(WordPairDto::isDiff).count();
-                WordPairDto[] pairs = pairsList.toArray(new WordPairDto[0]);
-                String pairsJson = toJsonWordPairs(pairs);
-
-                session = DuelSession.builder()
-                        .exerciseType("word-pairs")
-                        .status("WAITING")
-                        .build();
-                DuelSessionParams params = DuelSessionParams.builder()
-                        .session(session)
-                        .totalCells(diffCount)
-                        .wpRows(finalRows)
-                        .wpCols(finalCols)
-                        .wpTimeLimitSec(finalTimeLimit)
-                        .wpFontSize(finalFontSize)
-                        .wordPairsJson(pairsJson)
-                        .build();
-                session.setParams(params);
-                session = sessionRepository.save(session);
-
-                DuelParticipant p1 = DuelParticipant.builder().session(session).user(user).build();
-                DuelParticipant p2 = DuelParticipant.builder().session(session).user(opponent.getUser()).build();
-                participantRepository.save(p1);
-                participantRepository.save(p2);
-
-                msgForUser = MatchFoundMessage.builder()
-                        .type(MATCH_FOUND).sessionId(session.getId())
-                        .opponentName(opponent.getUser().getUsername()).exerciseType("word-pairs")
-                        .pairs(pairs).wpRows(finalRows).wpCols(finalCols)
-                        .wpTimeLimit(finalTimeLimit).wpFontSize(finalFontSize)
-                        .totalCells(diffCount).build();
-
-                msgForOpponent = MatchFoundMessage.builder()
-                        .type(MATCH_FOUND).sessionId(session.getId())
-                        .opponentName(user.getUsername()).exerciseType("word-pairs")
-                        .pairs(pairs).wpRows(finalRows).wpCols(finalCols)
-                        .wpTimeLimit(finalTimeLimit).wpFontSize(finalFontSize)
-                        .totalCells(diffCount).build();
-
-            } else if (req instanceof RsvpQueueRequest rr) {
-                // ── RSVP exercise ───────────────────────────────────────────────
-                int finalSyntagmWidth = Math.min(rr.getRsvpSyntagmWidth(), opponent.getRsvpSyntagmWidth());
-                int finalDisplayTime  = Math.max(rr.getRsvpDisplayTime(),  opponent.getRsvpDisplayTime());
-
-                List<Long> textIds = textRepository.findAllIds();
-                if (textIds.isEmpty()) {
-                    throw new RuntimeException("No texts available for RSVP duel");
-                }
-                Long randomId = textIds.get(RANDOM.nextInt(textIds.size()));
-                Text text = textRepository.findById(randomId)
-                        .orElseThrow(() -> new RuntimeException("Text not found: " + randomId));
-                List<QuestionResponse> questions = text.getQuestions().stream()
-                        .map(q -> QuestionResponse.builder()
-                                .id(q.getId())
-                                .text(q.getQuestionText())
-                                .options(q.getOptions().stream().map(opt -> opt.getOptionText()).toList())
-                                .correctIndex(q.getCorrectIndex())
-                                .build())
-                        .toList();
-                int totalQuestions = questions.size();
-
-                session = DuelSession.builder()
-                        .exerciseType("rsvp")
-                        .status("WAITING")
-                        .build();
-                DuelSessionParams params = DuelSessionParams.builder()
-                        .session(session)
-                        .totalCells(totalQuestions)
-                        .rsvpTextId(text.getId())
-                        .rsvpSyntagmWidth(finalSyntagmWidth)
-                        .rsvpDisplayTimeMs(finalDisplayTime)
-                        .build();
-                session.setParams(params);
-                session = sessionRepository.save(session);
-
-                DuelParticipant p1 = DuelParticipant.builder().session(session).user(user).build();
-                DuelParticipant p2 = DuelParticipant.builder().session(session).user(opponent.getUser()).build();
-                participantRepository.save(p1);
-                participantRepository.save(p2);
-
-                msgForUser = MatchFoundMessage.builder()
-                        .type(MATCH_FOUND).sessionId(session.getId())
-                        .opponentName(opponent.getUser().getUsername()).exerciseType("rsvp")
-                        .rsvpSyntagmWidth(finalSyntagmWidth).rsvpDisplayTime(finalDisplayTime)
-                        .rsvpTextId(text.getId()).rsvpTextTitle(text.getTitle())
-                        .rsvpTextContent(text.getContent()).rsvpQuestions(questions)
-                        .totalCells(totalQuestions).build();
-
-                msgForOpponent = MatchFoundMessage.builder()
-                        .type(MATCH_FOUND).sessionId(session.getId())
-                        .opponentName(user.getUsername()).exerciseType("rsvp")
-                        .rsvpSyntagmWidth(finalSyntagmWidth).rsvpDisplayTime(finalDisplayTime)
-                        .rsvpTextId(text.getId()).rsvpTextTitle(text.getTitle())
-                        .rsvpTextContent(text.getContent()).rsvpQuestions(questions)
-                        .totalCells(totalQuestions).build();
-
-            } else {
-                // ── Schulte Table (default) ─────────────────────────────────────
-                SchulteQueueRequest sr = (req instanceof SchulteQueueRequest s) ? s : new SchulteQueueRequest();
-                int finalGrid = Math.min(sr.getGridSize(), opponent.getGridSize());
-                int finalFont = Math.max(sr.getFontSize(), opponent.getFontSize());
-
-                int[] numbers = generateShuffledNumbers(finalGrid * finalGrid);
-                String numbersJson = toJson(numbers);
-
-                session = DuelSession.builder()
-                        .exerciseType("schulte-table")
-                        .status("WAITING")
-                        .build();
-                DuelSessionParams params = DuelSessionParams.builder()
-                        .session(session)
-                        .totalCells(finalGrid * finalGrid)
-                        .gridSize(finalGrid)
-                        .fontSize(finalFont)
-                        .schulteNumbersJson(numbersJson)
-                        .build();
-                session.setParams(params);
-                session = sessionRepository.save(session);
-
-                DuelParticipant p1 = DuelParticipant.builder().session(session).user(user).build();
-                DuelParticipant p2 = DuelParticipant.builder().session(session).user(opponent.getUser()).build();
-                participantRepository.save(p1);
-                participantRepository.save(p2);
-
-                msgForUser = MatchFoundMessage.builder()
-                        .type(MATCH_FOUND).sessionId(session.getId())
-                        .opponentName(opponent.getUser().getUsername()).exerciseType("schulte-table")
-                        .gridSize(finalGrid).fontSize(finalFont)
-                        .numbers(numbers).totalCells(finalGrid * finalGrid).build();
-
-                msgForOpponent = MatchFoundMessage.builder()
-                        .type(MATCH_FOUND).sessionId(session.getId())
-                        .opponentName(user.getUsername()).exerciseType("schulte-table")
-                        .gridSize(finalGrid).fontSize(finalFont)
-                        .numbers(numbers).totalCells(finalGrid * finalGrid).build();
-            }
-
-            return new MatchmakingService.MatchResult(
-                    session.getId(),
-                    user.getEmail(),
-                    opponent.getUser().getEmail(),
-                    msgForUser,
-                    msgForOpponent
-            );
+        if (opponentOpt.isEmpty()) {
+            addToQueue(user, req);
+            return null;
         }
 
-        // No opponent found — add to queue
+        MatchmakingQueue opponent = opponentOpt.get();
+        queueRepository.delete(opponent);
+
+        MatchData data = buildMatch(user, opponent, req);
+
+        return new MatchmakingService.MatchResult(
+                data.session().getId(),
+                user.getEmail(),
+                opponent.getUser().getEmail(),
+                data.msgForUser(),
+                data.msgForOpponent()
+        );
+    }
+
+    // ── Dispatcher ───────────────────────────────────────────────────────────
+
+    private MatchData buildMatch(User user, MatchmakingQueue opponent, JoinQueueRequest req) {
+        if (req instanceof NumbersQueueRequest nr) {
+            return buildNumbersMatch(user, opponent, nr);
+        } else if (req instanceof WordPairsQueueRequest wp) {
+            return buildWordPairsMatch(user, opponent, wp);
+        } else if (req instanceof RsvpQueueRequest rr) {
+            return buildRsvpMatch(user, opponent, rr);
+        } else {
+            SchulteQueueRequest sr = req instanceof SchulteQueueRequest s ? s : new SchulteQueueRequest();
+            return buildSchulteMatch(user, opponent, sr);
+        }
+    }
+
+    // ── Per-exercise match builders ───────────────────────────────────────────
+
+    private MatchData buildNumbersMatch(User user, MatchmakingQueue opponent, NumbersQueueRequest req) {
+        int finalDigitCount  = Math.min(req.getDigitCount(),  opponent.getDigitCount());
+        int finalDisplayTime = Math.max(req.getDisplayTime(), opponent.getDisplayTime());
+        int[] numbers = generateRandomNumbers(finalDigitCount);
+
+        DuelSessionParams params = DuelSessionParams.builder()
+                .totalCells(NUMBERS_TOTAL_ROUNDS)
+                .digitCount(finalDigitCount)
+                .displayTimeMs(finalDisplayTime)
+                .numbersSequenceJson(toJson(numbers))
+                .build();
+        DuelSession session = saveSessionWithParticipants(NUMBERS, params, user, opponent.getUser());
+
+        MatchFoundMessage msgForUser = MatchFoundMessage.builder()
+                .type(MATCH_FOUND).sessionId(session.getId())
+                .opponentName(opponent.getUser().getUsername()).exerciseType(NUMBERS)
+                .digitCount(finalDigitCount).displayTime(finalDisplayTime)
+                .totalRounds(NUMBERS_TOTAL_ROUNDS).numbers(numbers).totalCells(NUMBERS_TOTAL_ROUNDS)
+                .build();
+        MatchFoundMessage msgForOpponent = MatchFoundMessage.builder()
+                .type(MATCH_FOUND).sessionId(session.getId())
+                .opponentName(user.getUsername()).exerciseType(NUMBERS)
+                .digitCount(finalDigitCount).displayTime(finalDisplayTime)
+                .totalRounds(NUMBERS_TOTAL_ROUNDS).numbers(numbers).totalCells(NUMBERS_TOTAL_ROUNDS)
+                .build();
+
+        return new MatchData(session, msgForUser, msgForOpponent);
+    }
+
+    private MatchData buildWordPairsMatch(User user, MatchmakingQueue opponent, WordPairsQueueRequest req) {
+        int finalRows      = Math.min(req.getWpRows(),      opponent.getWpRows());
+        int finalCols      = Math.min(req.getWpCols(),      opponent.getWpCols());
+        int finalTimeLimit = Math.max(req.getWpTimeLimit(), opponent.getWpTimeLimit());
+        int finalFontSize  = Math.max(req.getWpFontSize(),  opponent.getWpFontSize());
+
+        List<WordPairDto> pairsList = generateWordPairs(finalRows * finalCols);
+        int diffCount = (int) pairsList.stream().filter(WordPairDto::isDiff).count();
+        WordPairDto[] pairs = pairsList.toArray(new WordPairDto[0]);
+
+        DuelSessionParams params = DuelSessionParams.builder()
+                .totalCells(diffCount)
+                .wpRows(finalRows).wpCols(finalCols)
+                .wpTimeLimitSec(finalTimeLimit).wpFontSize(finalFontSize)
+                .wordPairsJson(toJsonWordPairs(pairs))
+                .build();
+        DuelSession session = saveSessionWithParticipants(WORD_PAIRS, params, user, opponent.getUser());
+
+        MatchFoundMessage msgForUser = MatchFoundMessage.builder()
+                .type(MATCH_FOUND).sessionId(session.getId())
+                .opponentName(opponent.getUser().getUsername()).exerciseType(WORD_PAIRS)
+                .pairs(pairs).wpRows(finalRows).wpCols(finalCols)
+                .wpTimeLimit(finalTimeLimit).wpFontSize(finalFontSize).totalCells(diffCount)
+                .build();
+        MatchFoundMessage msgForOpponent = MatchFoundMessage.builder()
+                .type(MATCH_FOUND).sessionId(session.getId())
+                .opponentName(user.getUsername()).exerciseType(WORD_PAIRS)
+                .pairs(pairs).wpRows(finalRows).wpCols(finalCols)
+                .wpTimeLimit(finalTimeLimit).wpFontSize(finalFontSize).totalCells(diffCount)
+                .build();
+
+        return new MatchData(session, msgForUser, msgForOpponent);
+    }
+
+    private MatchData buildRsvpMatch(User user, MatchmakingQueue opponent, RsvpQueueRequest req) {
+        int finalSyntagmWidth = Math.min(req.getRsvpSyntagmWidth(), opponent.getRsvpSyntagmWidth());
+        int finalDisplayTime  = Math.max(req.getRsvpDisplayTime(),  opponent.getRsvpDisplayTime());
+
+        Text text = pickRandomText();
+        List<QuestionResponse> questions = buildQuestionResponses(text);
+
+        DuelSessionParams params = DuelSessionParams.builder()
+                .totalCells(questions.size())
+                .rsvpTextId(text.getId())
+                .rsvpSyntagmWidth(finalSyntagmWidth)
+                .rsvpDisplayTimeMs(finalDisplayTime)
+                .build();
+        DuelSession session = saveSessionWithParticipants("rsvp", params, user, opponent.getUser());
+
+        MatchFoundMessage msgForUser = MatchFoundMessage.builder()
+                .type(MATCH_FOUND).sessionId(session.getId())
+                .opponentName(opponent.getUser().getUsername()).exerciseType("rsvp")
+                .rsvpSyntagmWidth(finalSyntagmWidth).rsvpDisplayTime(finalDisplayTime)
+                .rsvpTextId(text.getId()).rsvpTextTitle(text.getTitle())
+                .rsvpTextContent(text.getContent()).rsvpQuestions(questions)
+                .totalCells(questions.size())
+                .build();
+        MatchFoundMessage msgForOpponent = MatchFoundMessage.builder()
+                .type(MATCH_FOUND).sessionId(session.getId())
+                .opponentName(user.getUsername()).exerciseType("rsvp")
+                .rsvpSyntagmWidth(finalSyntagmWidth).rsvpDisplayTime(finalDisplayTime)
+                .rsvpTextId(text.getId()).rsvpTextTitle(text.getTitle())
+                .rsvpTextContent(text.getContent()).rsvpQuestions(questions)
+                .totalCells(questions.size())
+                .build();
+
+        return new MatchData(session, msgForUser, msgForOpponent);
+    }
+
+    private MatchData buildSchulteMatch(User user, MatchmakingQueue opponent, SchulteQueueRequest req) {
+        int finalGrid = Math.min(req.getGridSize(), opponent.getGridSize());
+        int finalFont = Math.max(req.getFontSize(), opponent.getFontSize());
+        int totalCells = finalGrid * finalGrid;
+        int[] numbers = generateShuffledNumbers(totalCells);
+
+        DuelSessionParams params = DuelSessionParams.builder()
+                .totalCells(totalCells)
+                .gridSize(finalGrid).fontSize(finalFont)
+                .schulteNumbersJson(toJson(numbers))
+                .build();
+        DuelSession session = saveSessionWithParticipants(SCHULTE_TABLE, params, user, opponent.getUser());
+
+        MatchFoundMessage msgForUser = MatchFoundMessage.builder()
+                .type(MATCH_FOUND).sessionId(session.getId())
+                .opponentName(opponent.getUser().getUsername()).exerciseType(SCHULTE_TABLE)
+                .gridSize(finalGrid).fontSize(finalFont).numbers(numbers).totalCells(totalCells)
+                .build();
+        MatchFoundMessage msgForOpponent = MatchFoundMessage.builder()
+                .type(MATCH_FOUND).sessionId(session.getId())
+                .opponentName(user.getUsername()).exerciseType(SCHULTE_TABLE)
+                .gridSize(finalGrid).fontSize(finalFont).numbers(numbers).totalCells(totalCells)
+                .build();
+
+        return new MatchData(session, msgForUser, msgForOpponent);
+    }
+
+    // ── Infrastructure helpers ────────────────────────────────────────────────
+
+    /** Finds the user by email and removes any stale queue entry for them. */
+    private User findAndCleanupUser(String username) {
+        User user = userRepository.findByEmail(username)
+                .orElseThrow(() -> new RuntimeException("User not found: " + username));
+        queueRepository.deleteByUserId(user.getId());
+        return user;
+    }
+
+    /** Looks up the oldest waiting opponent for the given exercise type. */
+    private Optional<MatchmakingQueue> findOpponent(Long userId, String exerciseType) {
+        List<MatchmakingQueue> opponents =
+                queueRepository.findOpponents(userId, exerciseType, PageRequest.of(0, 1));
+        return opponents.isEmpty() ? Optional.empty() : Optional.of(opponents.get(0));
+    }
+
+    /**
+     * Creates a DuelSession (with cascaded DuelSessionParams) and saves both participants.
+     * The params object must NOT have session set yet — this method wires the relationship.
+     */
+    private DuelSession saveSessionWithParticipants(String exerciseType, DuelSessionParams params,
+                                                    User user, User opponent) {
+        DuelSession session = DuelSession.builder()
+                .exerciseType(exerciseType)
+                .status("WAITING")
+                .build();
+        params.setSession(session);
+        session.setParams(params);
+        session = sessionRepository.save(session);
+
+        participantRepository.save(DuelParticipant.builder().session(session).user(user).build());
+        participantRepository.save(DuelParticipant.builder().session(session).user(opponent).build());
+        return session;
+    }
+
+    /** Adds the user to the matchmaking queue when no opponent was found immediately. */
+    private void addToQueue(User user, JoinQueueRequest req) {
         MatchmakingQueue entry;
         if (req instanceof SchulteQueueRequest sr) {
             entry = MatchmakingQueue.builder()
-                    .user(user).exerciseType("schulte-table")
+                    .user(user).exerciseType(SCHULTE_TABLE)
                     .gridSize(sr.getGridSize()).fontSize(sr.getFontSize())
                     .build();
         } else if (req instanceof NumbersQueueRequest nr) {
             entry = MatchmakingQueue.builder()
-                    .user(user).exerciseType("numbers")
+                    .user(user).exerciseType(NUMBERS)
                     .digitCount(nr.getDigitCount()).displayTime(nr.getDisplayTime())
                     .build();
         } else if (req instanceof WordPairsQueueRequest wp) {
             entry = MatchmakingQueue.builder()
-                    .user(user).exerciseType("word-pairs")
+                    .user(user).exerciseType(WORD_PAIRS)
                     .wpRows(wp.getWpRows()).wpCols(wp.getWpCols())
                     .wpTimeLimit(wp.getWpTimeLimit()).wpFontSize(wp.getWpFontSize())
                     .build();
@@ -303,9 +284,35 @@ public class MatchmakingDbService {
             throw new IllegalArgumentException("Unknown exercise type: " + req.getExerciseType());
         }
         queueRepository.save(entry);
-
-        return null;
     }
+
+    /** Picks a random text from DB for RSVP exercise. */
+    private Text pickRandomText() {
+        List<Long> textIds = textRepository.findAllIds();
+        if (textIds.isEmpty()) {
+            throw new ResourceNotFoundException("No texts available for RSVP duel");
+        }
+        Long randomId = textIds.get(RANDOM.nextInt(textIds.size()));
+        return textRepository.findById(randomId)
+                .orElseThrow(() -> new ResourceNotFoundException("Text not found: " + randomId));
+    }
+
+    /** Maps Text questions to QuestionResponse DTOs. */
+    private List<QuestionResponse> buildQuestionResponses(Text text) {
+        return text.getQuestions().stream()
+                .map(q -> QuestionResponse.builder()
+                        .id(q.getId())
+                        .text(q.getQuestionText())
+                        .options(q.getOptions().stream().map(opt -> opt.getOptionText()).toList())
+                        .correctIndex(q.getCorrectIndex())
+                        .build())
+                .toList();
+    }
+
+    /** Carries a created session and the two MATCH_FOUND messages out of each exercise builder. */
+    private record MatchData(DuelSession session, MatchFoundMessage msgForUser, MatchFoundMessage msgForOpponent) {}
+
+    // ── Queue lifecycle ───────────────────────────────────────────────────────
 
     @Transactional
     public void leaveQueue(String username) {
@@ -318,6 +325,8 @@ public class MatchmakingDbService {
         java.time.LocalDateTime cutoff = java.time.LocalDateTime.now().minusMinutes(5);
         queueRepository.deleteAllByJoinedAtBefore(cutoff);
     }
+
+    // ── Game data generators ──────────────────────────────────────────────────
 
     /** Generates a shuffled grid of word-pairs from DB: ~50% different. */
     private List<WordPairDto> generateWordPairs(int totalCells) {
@@ -344,7 +353,7 @@ public class MatchmakingDbService {
         return list.stream().mapToInt(Integer::intValue).toArray();
     }
 
-    /** Generates NUMBERS_TOTAL_ROUNDS random numbers each having exactly digitCount digits (for Numbers exercise). */
+    /** Generates NUMBERS_TOTAL_ROUNDS random numbers each having exactly digitCount digits. */
     private int[] generateRandomNumbers(int digitCount) {
         int min = (int) Math.pow(10, digitCount - 1.0);
         int max = (int) Math.pow(10, digitCount) - 1;
@@ -369,7 +378,8 @@ public class MatchmakingDbService {
         try {
             return objectMapper.writeValueAsString(pairs);
         } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to serialize word pairs", e);
+            throw new UncheckedIOException("Failed to serialize word pairs to JSON", e);
         }
     }
 }
+
