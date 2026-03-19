@@ -46,6 +46,10 @@ public class WordPairsController {
         List<WordPairDto> result = new ArrayList<>();
 
         wpDiffPairRepository.findRandom(diffCount)
+                .stream()
+                // Defensive guard: skip pairs where words are identical or contain
+                // Latin homoglyphs that look like Cyrillic characters.
+                .filter(p -> isValidDiffPair(p.getWord1(), p.getWord2()))
                 .forEach(p -> result.add(new WordPairDto(p.getWord1(), p.getWord2(), true)));
 
         wpSameWordRepository.findRandom(sameCount)
@@ -53,6 +57,25 @@ public class WordPairsController {
 
         Collections.shuffle(result, RANDOM);
         return result;
+    }
+
+    /**
+     * Returns true only if the pair is safe to show as "different":
+     * - words must not be equal (guards against data bugs like word1 = word2)
+     * - neither word may contain Latin letters that are homoglyphs of Cyrillic
+     *   (e.g. Latin 'a','e','i','o','p','c','x','v' look identical to Cyrillic equivalents)
+     */
+    private static boolean isValidDiffPair(String w1, String w2) {
+        if (w1.equals(w2)) return false;
+        return !containsLatinHomoglyph(w1) && !containsLatinHomoglyph(w2);
+    }
+
+    /** Detects any ASCII letter inside a string (signals a mixed-script homoglyph). */
+    private static boolean containsLatinHomoglyph(String word) {
+        for (char ch : word.toCharArray()) {
+            if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) return true;
+        }
+        return false;
     }
 }
 

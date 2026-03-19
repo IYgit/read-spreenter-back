@@ -464,6 +464,10 @@ public class MatchmakingDbService {
         List<WordPairDto> pairs = new ArrayList<>();
 
         wpDiffPairRepository.findRandom(diffCount)
+                .stream()
+                // Defensive guard: identical words or Latin homoglyphs must never
+                // reach the client as "different" pairs (mirrors WordPairsController).
+                .filter(p -> isValidDiffPair(p.getWord1(), p.getWord2()))
                 .forEach(p -> pairs.add(new WordPairDto(p.getWord1(), p.getWord2(), true)));
 
         wpSameWordRepository.findRandom(sameCount)
@@ -471,6 +475,18 @@ public class MatchmakingDbService {
 
         Collections.shuffle(pairs, RANDOM);
         return pairs;
+    }
+
+    private static boolean isValidDiffPair(String w1, String w2) {
+        if (w1.equals(w2)) return false;
+        return !containsLatinHomoglyph(w1) && !containsLatinHomoglyph(w2);
+    }
+
+    private static boolean containsLatinHomoglyph(String word) {
+        for (char ch : word.toCharArray()) {
+            if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) return true;
+        }
+        return false;
     }
 
     /** Generates count shuffled numbers 1..count (for Schulte Table). */
