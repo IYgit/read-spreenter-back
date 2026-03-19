@@ -23,7 +23,7 @@ public class MatchFoundMessage {
     // ── Shared: numbers[] ─────────────────────────────────────────────────────
     /** Schulte: shuffled 1..gridSize²; Numbers: array of 10 random numbers */
     private int[] numbers;
-    private int totalCells;         // Schulte: gridSize²; Numbers: 10; WordPairs: diffCount; RSVP: totalQuestions
+    private int totalCells;         // Schulte: gridSize²; Numbers: 10; WordPairs: diffCount; RSVP: totalQuestions; WordSearch: wordCount
 
     // ── Numbers exercise ───────────────────────────────────────────────────────
     private int digitCount;         // digits per number
@@ -44,7 +44,13 @@ public class MatchFoundMessage {
     private String  rsvpTextTitle;
     private String  rsvpTextContent;
     private List<QuestionResponse> rsvpQuestions;
+
+    // ── Word Search exercise ───────────────────────────────────────────────────
+    private String[][]         wsGrid;          // 2D letter grid (same for both)
+    private String[]           wsWords;         // words to find
+    private WsWordPosition[]   wsWordPositions; // positions for client highlight
+    private Integer            wsRows;
+    private Integer            wsCols;
+    private Integer            wsWordCount;
+    private Integer            wsFontSize;
 }
-
-
-

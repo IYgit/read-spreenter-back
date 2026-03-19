@@ -8,7 +8,9 @@ import com.iyanc.javarush.readsprinterback.dto.request.SchulteQueueRequest;
 import com.iyanc.javarush.readsprinterback.dto.request.NumbersQueueRequest;
 import com.iyanc.javarush.readsprinterback.dto.request.WordPairsQueueRequest;
 import com.iyanc.javarush.readsprinterback.dto.request.RsvpQueueRequest;
+import com.iyanc.javarush.readsprinterback.dto.request.WordSearchQueueRequest;
 import com.iyanc.javarush.readsprinterback.dto.response.MatchFoundMessage;
+import com.iyanc.javarush.readsprinterback.dto.response.WsWordPosition;
 import com.iyanc.javarush.readsprinterback.dto.response.QuestionResponse;
 import com.iyanc.javarush.readsprinterback.entity.*;
 import com.iyanc.javarush.readsprinterback.exception.ResourceNotFoundException;
@@ -21,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.UncheckedIOException;
 import java.util.*;
+import java.util.Arrays;
 
 /**
  * Handles all DB operations for matchmaking in a dedicated @Transactional boundary.
@@ -36,10 +39,21 @@ public class MatchmakingDbService {
     private static final Random RANDOM = new Random();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    private static final String MATCH_FOUND = "MATCH_FOUND";
-    private static final String NUMBERS = "numbers";
-    private static final String SCHULTE_TABLE = "schulte-table";
-    private static final String WORD_PAIRS = "word-pairs";
+    private static final String MATCH_FOUND    = "MATCH_FOUND";
+    private static final String NUMBERS        = "numbers";
+    private static final String SCHULTE_TABLE  = "schulte-table";
+    private static final String WORD_PAIRS     = "word-pairs";
+    private static final String WORD_SEARCH    = "word-search";
+
+    private static final String UKRAINIAN_LETTERS = "абвгґдеєжзиіїйклмнопрстуфхцчшщьюя";
+    private static final String[] WORD_BANK = {
+        "кивати","лопата","трава","музика","книга","сонце",
+        "вікно","школа","дорога","молоко","ліжко","стілець",
+        "ранок","вечір","зірка","берег","камінь","дерево",
+        "квітка","вітер","хмара","місяць","листок","ягода",
+        "робота","ліхтар","площа","ковдра","горіх",
+        "калина","пшениця","вишня","город","полуниця"
+    };
 
     private final MatchmakingQueueRepository queueRepository;
     private final DuelSessionRepository sessionRepository;
@@ -87,6 +101,8 @@ public class MatchmakingDbService {
             return buildWordPairsMatch(user, opponent, wp);
         } else if (req instanceof RsvpQueueRequest rr) {
             return buildRsvpMatch(user, opponent, rr);
+        } else if (req instanceof WordSearchQueueRequest ws) {
+            return buildWordSearchMatch(user, opponent, ws);
         } else {
             SchulteQueueRequest sr = req instanceof SchulteQueueRequest s ? s : new SchulteQueueRequest();
             return buildSchulteMatch(user, opponent, sr);
@@ -220,6 +236,119 @@ public class MatchmakingDbService {
         return new MatchData(session, msgForUser, msgForOpponent);
     }
 
+    private MatchData buildWordSearchMatch(User user, MatchmakingQueue opponent,
+                                            WordSearchQueueRequest req) {
+        int finalRows      = Math.min(req.getWsRows(),      opponent.getWsRows());
+        int finalCols      = Math.min(req.getWsCols(),      opponent.getWsCols());
+        int finalWordCount = Math.min(req.getWsWordCount(), opponent.getWsWordCount());
+        int finalFontSize  = Math.max(req.getWsFontSize(),  opponent.getWsFontSize());
+
+        WordSearchGridData gridData = generateWordSearchGrid(finalRows, finalCols, finalWordCount);
+
+        DuelSessionParams params = DuelSessionParams.builder()
+                .totalCells(finalWordCount)
+                .wsRows(finalRows).wsCols(finalCols)
+                .wsWordCount(finalWordCount).wsFontSize(finalFontSize)
+                .wsGridJson(toJsonObject(gridData.grid()))
+                .wsWordsJson(toJsonObject(gridData.words()))
+                .wsPositionsJson(toJsonObject(gridData.positions()))
+                .build();
+        DuelSession session = saveSessionWithParticipants(WORD_SEARCH, params, user, opponent.getUser());
+
+        String[]       wsWords     = gridData.words().toArray(new String[0]);
+        WsWordPosition[] wsPositions = gridData.positions().toArray(new WsWordPosition[0]);
+
+        MatchFoundMessage msgForUser = MatchFoundMessage.builder()
+                .type(MATCH_FOUND).sessionId(session.getId())
+                .opponentName(opponent.getUser().getUsername()).exerciseType(WORD_SEARCH)
+                .wsGrid(gridData.grid()).wsWords(wsWords).wsWordPositions(wsPositions)
+                .wsRows(finalRows).wsCols(finalCols)
+                .wsWordCount(finalWordCount).wsFontSize(finalFontSize)
+                .totalCells(finalWordCount)
+                .build();
+        MatchFoundMessage msgForOpponent = MatchFoundMessage.builder()
+                .type(MATCH_FOUND).sessionId(session.getId())
+                .opponentName(user.getUsername()).exerciseType(WORD_SEARCH)
+                .wsGrid(gridData.grid()).wsWords(wsWords).wsWordPositions(wsPositions)
+                .wsRows(finalRows).wsCols(finalCols)
+                .wsWordCount(finalWordCount).wsFontSize(finalFontSize)
+                .totalCells(finalWordCount)
+                .build();
+
+        return new MatchData(session, msgForUser, msgForOpponent);
+    }
+
+    /** Generates a word-search grid: places words horizontally in unique random rows. */
+    private WordSearchGridData generateWordSearchGrid(int rows, int cols, int wordCount) {
+        List<String> shuffled = new ArrayList<>(List.of(WORD_BANK));
+        Collections.shuffle(shuffled, RANDOM);
+        List<String> fitting = shuffled.stream()
+                .filter(w -> w.length() <= cols)
+                .limit(wordCount)
+                .toList();
+
+        // Fill grid with random Ukrainian letters
+        char[][] grid = new char[rows][cols];
+        for (char[] row : grid) {
+            for (int c = 0; c < cols; c++) {
+                row[c] = UKRAINIAN_LETTERS.charAt(RANDOM.nextInt(UKRAINIAN_LETTERS.length()));
+            }
+        }
+
+        // Place each word in a unique random row
+        List<Integer> availableRows = new ArrayList<>();
+        for (int i = 0; i < rows; i++) availableRows.add(i);
+        Collections.shuffle(availableRows, RANDOM);
+
+        List<WsWordPosition> positions = new ArrayList<>();
+        for (int i = 0; i < fitting.size(); i++) {
+            String word    = fitting.get(i);
+            int    rowIdx  = availableRows.get(i);
+            int    maxStart = cols - word.length();
+            int    startCol = RANDOM.nextInt(maxStart + 1);
+            for (int k = 0; k < word.length(); k++) {
+                grid[rowIdx][startCol + k] = word.charAt(k);
+            }
+            positions.add(new WsWordPosition(word, rowIdx, startCol));
+        }
+
+        // Convert char[][] → String[][]
+        String[][] stringGrid = new String[rows][cols];
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                stringGrid[r][c] = String.valueOf(grid[r][c]);
+            }
+        }
+        return new WordSearchGridData(stringGrid, fitting, positions);
+    }
+
+    private record WordSearchGridData(String[][] grid, List<String> words, List<WsWordPosition> positions) {
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof WordSearchGridData other)) return false;
+            return Arrays.deepEquals(this.grid, other.grid)
+                    && Objects.equals(this.words, other.words)
+                    && Objects.equals(this.positions, other.positions);
+        }
+
+        @Override
+        public int hashCode() {
+            int result = Arrays.deepHashCode(grid);
+            result = 31 * result + Objects.hashCode(words);
+            result = 31 * result + Objects.hashCode(positions);
+            return result;
+        }
+
+        @Override
+        public String toString() {
+            return "WordSearchGridData[grid=" + Arrays.deepToString(grid)
+                    + ", words=" + words
+                    + ", positions=" + positions + "]";
+        }
+    }
+
     // ── Infrastructure helpers ────────────────────────────────────────────────
 
     /** Finds the user by email and removes any stale queue entry for them. */
@@ -279,6 +408,12 @@ public class MatchmakingDbService {
             entry = MatchmakingQueue.builder()
                     .user(user).exerciseType("rsvp")
                     .rsvpSyntagmWidth(rr.getRsvpSyntagmWidth()).rsvpDisplayTime(rr.getRsvpDisplayTime())
+                    .build();
+        } else if (req instanceof WordSearchQueueRequest ws) {
+            entry = MatchmakingQueue.builder()
+                    .user(user).exerciseType(WORD_SEARCH)
+                    .wsRows(ws.getWsRows()).wsCols(ws.getWsCols())
+                    .wsWordCount(ws.getWsWordCount()).wsFontSize(ws.getWsFontSize())
                     .build();
         } else {
             throw new IllegalArgumentException("Unknown exercise type: " + req.getExerciseType());
@@ -379,6 +514,14 @@ public class MatchmakingDbService {
             return objectMapper.writeValueAsString(pairs);
         } catch (JsonProcessingException e) {
             throw new UncheckedIOException("Failed to serialize word pairs to JSON", e);
+        }
+    }
+
+    private String toJsonObject(Object obj) {
+        try {
+            return objectMapper.writeValueAsString(obj);
+        } catch (JsonProcessingException e) {
+            throw new UncheckedIOException("Failed to serialize object to JSON", e);
         }
     }
 }

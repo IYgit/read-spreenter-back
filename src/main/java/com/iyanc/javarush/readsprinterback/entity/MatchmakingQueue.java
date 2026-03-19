@@ -59,6 +59,20 @@ public class MatchmakingQueue {
     @Column(name = "rsvp_display_time")
     private Integer rsvpDisplayTime;
 
+    // ── Word Search ───────────────────────────────────────────────────────────
+
+    @Column(name = "ws_rows")
+    private Integer wsRows;
+
+    @Column(name = "ws_cols")
+    private Integer wsCols;
+
+    @Column(name = "ws_word_count")
+    private Integer wsWordCount;
+
+    @Column(name = "ws_font_size")
+    private Integer wsFontSize;
+
     @Column(name = "joined_at", nullable = false)
     private LocalDateTime joinedAt;
 

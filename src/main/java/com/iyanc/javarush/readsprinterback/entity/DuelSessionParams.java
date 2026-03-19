@@ -96,5 +96,30 @@ public class DuelSessionParams {
     /** Milliseconds between syntagm flashes. */
     @Column(name = "rsvp_display_time_ms")
     private Integer rsvpDisplayTimeMs;
-}
 
+    // ── word-search ───────────────────────────────────────────────────────────
+
+    @Column(name = "ws_rows")
+    private Integer wsRows;
+
+    @Column(name = "ws_cols")
+    private Integer wsCols;
+
+    @Column(name = "ws_word_count")
+    private Integer wsWordCount;
+
+    @Column(name = "ws_font_size")
+    private Integer wsFontSize;
+
+    /** JSON 2D array of letters: [["к","и","т",...], ...] */
+    @Column(name = "ws_grid_json", columnDefinition = "TEXT")
+    private String wsGridJson;
+
+    /** JSON array of words to find: ["кивати","дерево",...] */
+    @Column(name = "ws_words_json", length = 1024)
+    private String wsWordsJson;
+
+    /** JSON array of {word, row, startCol} for client-side highlight */
+    @Column(name = "ws_positions_json", length = 2048)
+    private String wsPositionsJson;
+}
