@@ -4,6 +4,10 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.iyanc.javarush.readsprinterback.dto.WordPairDto;
 import com.iyanc.javarush.readsprinterback.dto.request.JoinQueueRequest;
+import com.iyanc.javarush.readsprinterback.dto.request.SchulteQueueRequest;
+import com.iyanc.javarush.readsprinterback.dto.request.NumbersQueueRequest;
+import com.iyanc.javarush.readsprinterback.dto.request.WordPairsQueueRequest;
+import com.iyanc.javarush.readsprinterback.dto.request.RsvpQueueRequest;
 import com.iyanc.javarush.readsprinterback.dto.response.MatchFoundMessage;
 import com.iyanc.javarush.readsprinterback.dto.response.QuestionResponse;
 import com.iyanc.javarush.readsprinterback.entity.*;
@@ -63,23 +67,20 @@ public class MatchmakingDbService {
             MatchmakingQueue opponent = opponentOpt.get();
             queueRepository.delete(opponent);
 
-            String exerciseType = req.getExerciseType();
-
             MatchFoundMessage msgForUser;
             MatchFoundMessage msgForOpponent;
             DuelSession session;
 
-            if ("numbers".equals(exerciseType)) {
+            if (req instanceof NumbersQueueRequest nr) {
                 // ── Numbers exercise ────────────────────────────────────────────
-                int finalDigitCount = Math.min(req.getDigitCount(), opponent.getDigitCount());
-                int finalDisplayTime = Math.max(req.getDisplayTime(), opponent.getDisplayTime());
+                int finalDigitCount  = Math.min(nr.getDigitCount(),  opponent.getDigitCount());
+                int finalDisplayTime = Math.max(nr.getDisplayTime(), opponent.getDisplayTime());
 
-                // Generate array of NUMBERS_TOTAL_ROUNDS random numbers with finalDigitCount digits
                 int[] numbers = generateRandomNumbers(finalDigitCount);
                 String numbersJson = toJson(numbers);
 
                 session = DuelSession.builder()
-                        .exerciseType(exerciseType)
+                        .exerciseType("numbers")
                         .gridSize(finalDigitCount)   // reuse gridSize column to store digitCount
                         .fontSize(finalDisplayTime)  // reuse fontSize column to store displayTime
                         .numbersSequence(numbersJson)
@@ -96,7 +97,7 @@ public class MatchmakingDbService {
                         .type(MATCH_FOUND)
                         .sessionId(session.getId())
                         .opponentName(opponent.getUser().getUsername())
-                        .exerciseType(exerciseType)
+                        .exerciseType("numbers")
                         .digitCount(finalDigitCount)
                         .displayTime(finalDisplayTime)
                         .totalRounds(NUMBERS_TOTAL_ROUNDS)
@@ -108,7 +109,7 @@ public class MatchmakingDbService {
                         .type(MATCH_FOUND)
                         .sessionId(session.getId())
                         .opponentName(user.getUsername())
-                        .exerciseType(exerciseType)
+                        .exerciseType("numbers")
                         .digitCount(finalDigitCount)
                         .displayTime(finalDisplayTime)
                         .totalRounds(NUMBERS_TOTAL_ROUNDS)
@@ -116,20 +117,18 @@ public class MatchmakingDbService {
                         .totalCells(NUMBERS_TOTAL_ROUNDS)
                         .build();
 
-            } else if ("word-pairs".equals(exerciseType)) {
+            } else if (req instanceof WordPairsQueueRequest wp) {
                 // ── Word Pairs exercise ─────────────────────────────────────────
-                int finalRows = Math.min(req.getWpRows(), opponent.getWpRows());
-                int finalCols = Math.min(req.getWpCols(), opponent.getWpCols());
-                int finalTimeLimit = Math.max(req.getWpTimeLimit(), opponent.getWpTimeLimit());
-                int finalFontSize = Math.max(req.getWpFontSize(), opponent.getWpFontSize());
+                int finalRows      = Math.min(wp.getWpRows(),      opponent.getWpRows());
+                int finalCols      = Math.min(wp.getWpCols(),      opponent.getWpCols());
+                int finalTimeLimit = Math.max(wp.getWpTimeLimit(), opponent.getWpTimeLimit());
+                int finalFontSize  = Math.max(wp.getWpFontSize(),  opponent.getWpFontSize());
 
                 List<WordPairDto> pairsList = generateWordPairs(finalRows * finalCols);
                 int diffCount = (int) pairsList.stream().filter(WordPairDto::isDiff).count();
                 WordPairDto[] pairs = pairsList.toArray(new WordPairDto[0]);
                 String pairsJson = toJsonWordPairs(pairs);
 
-                // gridSize encodes rows*10+cols (e.g. 4 rows, 4 cols → 44)
-                // fontSize stores wpFontSize; wpTimeLimit stored in display_time (reuse)
                 session = DuelSession.builder()
                         .exerciseType("word-pairs")
                         .gridSize(finalRows * 10 + finalCols)
@@ -145,30 +144,24 @@ public class MatchmakingDbService {
                 participantRepository.save(p2);
 
                 msgForUser = MatchFoundMessage.builder()
-                        .type(MATCH_FOUND)
-                        .sessionId(session.getId())
-                        .opponentName(opponent.getUser().getUsername())
-                        .exerciseType("word-pairs")
+                        .type(MATCH_FOUND).sessionId(session.getId())
+                        .opponentName(opponent.getUser().getUsername()).exerciseType("word-pairs")
                         .pairs(pairs).wpRows(finalRows).wpCols(finalCols)
                         .wpTimeLimit(finalTimeLimit).wpFontSize(finalFontSize)
                         .totalCells(diffCount).build();
 
                 msgForOpponent = MatchFoundMessage.builder()
-                        .type(MATCH_FOUND)
-                        .sessionId(session.getId())
-                        .opponentName(user.getUsername())
-                        .exerciseType("word-pairs")
+                        .type(MATCH_FOUND).sessionId(session.getId())
+                        .opponentName(user.getUsername()).exerciseType("word-pairs")
                         .pairs(pairs).wpRows(finalRows).wpCols(finalCols)
                         .wpTimeLimit(finalTimeLimit).wpFontSize(finalFontSize)
                         .totalCells(diffCount).build();
 
-            } else if ("rsvp".equals(exerciseType)) {
+            } else if (req instanceof RsvpQueueRequest rr) {
                 // ── RSVP exercise ───────────────────────────────────────────────
-                int finalSyntagmWidth = Math.min(req.getRsvpSyntagmWidth(), opponent.getRsvpSyntagmWidth());
-                int finalDisplayTime  = Math.max(req.getRsvpDisplayTime(), opponent.getRsvpDisplayTime());
+                int finalSyntagmWidth = Math.min(rr.getRsvpSyntagmWidth(), opponent.getRsvpSyntagmWidth());
+                int finalDisplayTime  = Math.max(rr.getRsvpDisplayTime(),  opponent.getRsvpDisplayTime());
 
-                // Pick a random text: fetch all IDs in Java and pick randomly
-                // (avoids JPQL ORDER BY RAND() dialect incompatibilities)
                 List<Long> textIds = textRepository.findAllIds();
                 if (textIds.isEmpty()) {
                     throw new RuntimeException("No texts available for RSVP duel");
@@ -180,15 +173,12 @@ public class MatchmakingDbService {
                         .map(q -> QuestionResponse.builder()
                                 .id(q.getId())
                                 .text(q.getQuestionText())
-                                .options(q.getOptions().stream()
-                                        .map(opt -> opt.getOptionText())
-                                        .toList())
+                                .options(q.getOptions().stream().map(opt -> opt.getOptionText()).toList())
                                 .correctIndex(q.getCorrectIndex())
                                 .build())
                         .toList();
                 int totalQuestions = questions.size();
 
-                // Store: gridSize=textId, fontSize=displayTime, numbersSequence=syntagmWidth
                 session = DuelSession.builder()
                         .exerciseType("rsvp")
                         .gridSize((int) text.getId().longValue())
@@ -204,43 +194,32 @@ public class MatchmakingDbService {
                 participantRepository.save(p2);
 
                 msgForUser = MatchFoundMessage.builder()
-                        .type(MATCH_FOUND)
-                        .sessionId(session.getId())
-                        .opponentName(opponent.getUser().getUsername())
-                        .exerciseType("rsvp")
-                        .rsvpSyntagmWidth(finalSyntagmWidth)
-                        .rsvpDisplayTime(finalDisplayTime)
-                        .rsvpTextId(text.getId())
-                        .rsvpTextTitle(text.getTitle())
-                        .rsvpTextContent(text.getContent())
-                        .rsvpQuestions(questions)
-                        .totalCells(totalQuestions)
-                        .build();
+                        .type(MATCH_FOUND).sessionId(session.getId())
+                        .opponentName(opponent.getUser().getUsername()).exerciseType("rsvp")
+                        .rsvpSyntagmWidth(finalSyntagmWidth).rsvpDisplayTime(finalDisplayTime)
+                        .rsvpTextId(text.getId()).rsvpTextTitle(text.getTitle())
+                        .rsvpTextContent(text.getContent()).rsvpQuestions(questions)
+                        .totalCells(totalQuestions).build();
 
                 msgForOpponent = MatchFoundMessage.builder()
-                        .type(MATCH_FOUND)
-                        .sessionId(session.getId())
-                        .opponentName(user.getUsername())
-                        .exerciseType("rsvp")
-                        .rsvpSyntagmWidth(finalSyntagmWidth)
-                        .rsvpDisplayTime(finalDisplayTime)
-                        .rsvpTextId(text.getId())
-                        .rsvpTextTitle(text.getTitle())
-                        .rsvpTextContent(text.getContent())
-                        .rsvpQuestions(questions)
-                        .totalCells(totalQuestions)
-                        .build();
+                        .type(MATCH_FOUND).sessionId(session.getId())
+                        .opponentName(user.getUsername()).exerciseType("rsvp")
+                        .rsvpSyntagmWidth(finalSyntagmWidth).rsvpDisplayTime(finalDisplayTime)
+                        .rsvpTextId(text.getId()).rsvpTextTitle(text.getTitle())
+                        .rsvpTextContent(text.getContent()).rsvpQuestions(questions)
+                        .totalCells(totalQuestions).build();
 
             } else {
-                int finalGrid = Math.min(req.getGridSize(), opponent.getGridSize());
-                int finalFont = Math.max(req.getFontSize(), opponent.getFontSize());
-                String finalExercise = "schulte-table";
+                // ── Schulte Table (default) ─────────────────────────────────────
+                SchulteQueueRequest sr = (req instanceof SchulteQueueRequest s) ? s : new SchulteQueueRequest();
+                int finalGrid = Math.min(sr.getGridSize(), opponent.getGridSize());
+                int finalFont = Math.max(sr.getFontSize(), opponent.getFontSize());
 
                 int[] numbers = generateShuffledNumbers(finalGrid * finalGrid);
                 String numbersJson = toJson(numbers);
 
                 session = DuelSession.builder()
-                        .exerciseType(finalExercise)
+                        .exerciseType("schulte-table")
                         .gridSize(finalGrid)
                         .fontSize(finalFont)
                         .numbersSequence(numbersJson)
@@ -254,26 +233,16 @@ public class MatchmakingDbService {
                 participantRepository.save(p2);
 
                 msgForUser = MatchFoundMessage.builder()
-                        .type(MATCH_FOUND)
-                        .sessionId(session.getId())
-                        .opponentName(opponent.getUser().getUsername())
-                        .exerciseType(finalExercise)
-                        .gridSize(finalGrid)
-                        .fontSize(finalFont)
-                        .numbers(numbers)
-                        .totalCells(finalGrid * finalGrid)
-                        .build();
+                        .type(MATCH_FOUND).sessionId(session.getId())
+                        .opponentName(opponent.getUser().getUsername()).exerciseType("schulte-table")
+                        .gridSize(finalGrid).fontSize(finalFont)
+                        .numbers(numbers).totalCells(finalGrid * finalGrid).build();
 
                 msgForOpponent = MatchFoundMessage.builder()
-                        .type(MATCH_FOUND)
-                        .sessionId(session.getId())
-                        .opponentName(user.getUsername())
-                        .exerciseType(finalExercise)
-                        .gridSize(finalGrid)
-                        .fontSize(finalFont)
-                        .numbers(numbers)
-                        .totalCells(finalGrid * finalGrid)
-                        .build();
+                        .type(MATCH_FOUND).sessionId(session.getId())
+                        .opponentName(user.getUsername()).exerciseType("schulte-table")
+                        .gridSize(finalGrid).fontSize(finalFont)
+                        .numbers(numbers).totalCells(finalGrid * finalGrid).build();
             }
 
             return new MatchmakingService.MatchResult(
@@ -286,20 +255,31 @@ public class MatchmakingDbService {
         }
 
         // No opponent found — add to queue
-        MatchmakingQueue entry = MatchmakingQueue.builder()
-                .user(user)
-                .exerciseType(req.getExerciseType())
-                .gridSize(req.getGridSize())
-                .fontSize(req.getFontSize())
-                .digitCount(req.getDigitCount())
-                .displayTime(req.getDisplayTime())
-                .wpRows(req.getWpRows())
-                .wpCols(req.getWpCols())
-                .wpTimeLimit(req.getWpTimeLimit())
-                .wpFontSize(req.getWpFontSize())
-                .rsvpSyntagmWidth(req.getRsvpSyntagmWidth())
-                .rsvpDisplayTime(req.getRsvpDisplayTime())
-                .build();
+        MatchmakingQueue entry;
+        if (req instanceof SchulteQueueRequest sr) {
+            entry = MatchmakingQueue.builder()
+                    .user(user).exerciseType("schulte-table")
+                    .gridSize(sr.getGridSize()).fontSize(sr.getFontSize())
+                    .build();
+        } else if (req instanceof NumbersQueueRequest nr) {
+            entry = MatchmakingQueue.builder()
+                    .user(user).exerciseType("numbers")
+                    .digitCount(nr.getDigitCount()).displayTime(nr.getDisplayTime())
+                    .build();
+        } else if (req instanceof WordPairsQueueRequest wp) {
+            entry = MatchmakingQueue.builder()
+                    .user(user).exerciseType("word-pairs")
+                    .wpRows(wp.getWpRows()).wpCols(wp.getWpCols())
+                    .wpTimeLimit(wp.getWpTimeLimit()).wpFontSize(wp.getWpFontSize())
+                    .build();
+        } else if (req instanceof RsvpQueueRequest rr) {
+            entry = MatchmakingQueue.builder()
+                    .user(user).exerciseType("rsvp")
+                    .rsvpSyntagmWidth(rr.getRsvpSyntagmWidth()).rsvpDisplayTime(rr.getRsvpDisplayTime())
+                    .build();
+        } else {
+            throw new IllegalArgumentException("Unknown exercise type: " + req.getExerciseType());
+        }
         queueRepository.save(entry);
 
         return null;

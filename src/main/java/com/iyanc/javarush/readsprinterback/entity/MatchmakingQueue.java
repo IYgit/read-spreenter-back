@@ -21,43 +21,43 @@ public class MatchmakingQueue {
     @Column(name = "exercise_type", nullable = false)
     private String exerciseType;
 
-    @Column(name = "grid_size", nullable = false)
-    private int gridSize;
+    // ── Schulte Table ─────────────────────────────────────────────────────────
 
-    @Column(name = "font_size", nullable = false)
-    private int fontSize;
+    @Column(name = "grid_size")
+    private Integer gridSize;
 
-    /** For "numbers" exercise: number of digits per round (3..8) */
-    @Column(name = "digit_count", nullable = false)
-    private int digitCount;
+    @Column(name = "font_size")
+    private Integer fontSize;
 
-    /** For "numbers" exercise: display time in ms (50..2000) */
-    @Column(name = "display_time", nullable = false)
-    private int displayTime;
+    // ── Numbers ───────────────────────────────────────────────────────────────
 
-    /** For "word-pairs" exercise: grid rows (3..5) */
-    @Column(name = "wp_rows", nullable = false)
-    private int wpRows;
+    @Column(name = "digit_count")
+    private Integer digitCount;
 
-    /** For "word-pairs" exercise: grid cols (3..5) */
-    @Column(name = "wp_cols", nullable = false)
-    private int wpCols;
+    @Column(name = "display_time")
+    private Integer displayTime;
 
-    /** For "word-pairs" exercise: time limit in seconds (30..120) */
-    @Column(name = "wp_time_limit", nullable = false)
-    private int wpTimeLimit;
+    // ── Word Pairs ────────────────────────────────────────────────────────────
 
-    /** For "word-pairs" exercise: font size in px (12..18) */
-    @Column(name = "wp_font_size", nullable = false)
-    private int wpFontSize;
+    @Column(name = "wp_rows")
+    private Integer wpRows;
 
-    /** For "rsvp" exercise: number of words per syntagm (1..5) */
-    @Column(name = "rsvp_syntagm_width", nullable = false)
-    private int rsvpSyntagmWidth = 3;
+    @Column(name = "wp_cols")
+    private Integer wpCols;
 
-    /** For "rsvp" exercise: display time per syntagm in ms (100..1000) */
-    @Column(name = "rsvp_display_time", nullable = false)
-    private int rsvpDisplayTime = 300;
+    @Column(name = "wp_time_limit")
+    private Integer wpTimeLimit;
+
+    @Column(name = "wp_font_size")
+    private Integer wpFontSize;
+
+    // ── RSVP ──────────────────────────────────────────────────────────────────
+
+    @Column(name = "rsvp_syntagm_width")
+    private Integer rsvpSyntagmWidth;
+
+    @Column(name = "rsvp_display_time")
+    private Integer rsvpDisplayTime;
 
     @Column(name = "joined_at", nullable = false)
     private LocalDateTime joinedAt;
@@ -67,4 +67,3 @@ public class MatchmakingQueue {
         if (joinedAt == null) joinedAt = LocalDateTime.now();
     }
 }
-
