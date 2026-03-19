@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Handles all DB operations for matchmaking in a dedicated @Transactional boundary.
@@ -168,12 +167,15 @@ public class MatchmakingDbService {
                 int finalSyntagmWidth = Math.min(req.getRsvpSyntagmWidth(), opponent.getRsvpSyntagmWidth());
                 int finalDisplayTime  = Math.max(req.getRsvpDisplayTime(), opponent.getRsvpDisplayTime());
 
-                // Pick a random text from DB
-                List<Text> randomTexts = textRepository.findRandom(PageRequest.of(0, 1));
-                if (randomTexts.isEmpty()) {
+                // Pick a random text: fetch all IDs in Java and pick randomly
+                // (avoids JPQL ORDER BY RAND() dialect incompatibilities)
+                List<Long> textIds = textRepository.findAllIds();
+                if (textIds.isEmpty()) {
                     throw new RuntimeException("No texts available for RSVP duel");
                 }
-                Text text = randomTexts.get(0);
+                Long randomId = textIds.get(RANDOM.nextInt(textIds.size()));
+                Text text = textRepository.findById(randomId)
+                        .orElseThrow(() -> new RuntimeException("Text not found: " + randomId));
                 List<QuestionResponse> questions = text.getQuestions().stream()
                         .map(q -> QuestionResponse.builder()
                                 .id(q.getId())

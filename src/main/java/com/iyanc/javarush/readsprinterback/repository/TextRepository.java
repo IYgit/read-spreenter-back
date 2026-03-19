@@ -11,6 +11,10 @@ public interface TextRepository extends JpaRepository<Text, Long> {
     List<Text> findAllByOrderByIdAsc();
     List<Text> findByDifficulty(Text.Difficulty difficulty);
 
+    /** Returns all text IDs — used for random selection in Java to avoid JPQL RAND() dialect issues */
+    @Query("SELECT t.id FROM Text t")
+    List<Long> findAllIds();
+
     @Query("SELECT t FROM Text t ORDER BY RAND()")
     List<Text> findRandom(Pageable pageable);
 }
