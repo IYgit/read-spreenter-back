@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.iyanc.javarush.readsprinterback.dto.WordPairDto;
 import com.iyanc.javarush.readsprinterback.dto.request.JoinQueueRequest;
 import com.iyanc.javarush.readsprinterback.dto.response.MatchFoundMessage;
+import com.iyanc.javarush.readsprinterback.dto.response.QuestionResponse;
 import com.iyanc.javarush.readsprinterback.entity.*;
 import com.iyanc.javarush.readsprinterback.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Handles all DB operations for matchmaking in a dedicated @Transactional boundary.
@@ -35,6 +37,7 @@ public class MatchmakingDbService {
     private final UserRepository userRepository;
     private final WpDiffPairRepository wpDiffPairRepository;
     private final WpSameWordRepository wpSameWordRepository;
+    private final TextRepository textRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -160,8 +163,73 @@ public class MatchmakingDbService {
                         .wpTimeLimit(finalTimeLimit).wpFontSize(finalFontSize)
                         .totalCells(diffCount).build();
 
+            } else if ("rsvp".equals(exerciseType)) {
+                // ── RSVP exercise ───────────────────────────────────────────────
+                int finalSyntagmWidth = Math.min(req.getRsvpSyntagmWidth(), opponent.getRsvpSyntagmWidth());
+                int finalDisplayTime  = Math.max(req.getRsvpDisplayTime(), opponent.getRsvpDisplayTime());
+
+                // Pick a random text from DB
+                List<Text> randomTexts = textRepository.findRandom(PageRequest.of(0, 1));
+                if (randomTexts.isEmpty()) {
+                    throw new RuntimeException("No texts available for RSVP duel");
+                }
+                Text text = randomTexts.get(0);
+                List<QuestionResponse> questions = text.getQuestions().stream()
+                        .map(q -> QuestionResponse.builder()
+                                .id(q.getId())
+                                .text(q.getQuestionText())
+                                .options(q.getOptions().stream()
+                                        .map(opt -> opt.getOptionText())
+                                        .toList())
+                                .correctIndex(q.getCorrectIndex())
+                                .build())
+                        .toList();
+                int totalQuestions = questions.size();
+
+                // Store: gridSize=textId, fontSize=displayTime, numbersSequence=syntagmWidth
+                session = DuelSession.builder()
+                        .exerciseType("rsvp")
+                        .gridSize((int) text.getId().longValue())
+                        .fontSize(finalDisplayTime)
+                        .numbersSequence(String.valueOf(finalSyntagmWidth))
+                        .status("WAITING")
+                        .build();
+                session = sessionRepository.save(session);
+
+                DuelParticipant p1 = DuelParticipant.builder().session(session).user(user).build();
+                DuelParticipant p2 = DuelParticipant.builder().session(session).user(opponent.getUser()).build();
+                participantRepository.save(p1);
+                participantRepository.save(p2);
+
+                msgForUser = MatchFoundMessage.builder()
+                        .type(MATCH_FOUND)
+                        .sessionId(session.getId())
+                        .opponentName(opponent.getUser().getUsername())
+                        .exerciseType("rsvp")
+                        .rsvpSyntagmWidth(finalSyntagmWidth)
+                        .rsvpDisplayTime(finalDisplayTime)
+                        .rsvpTextId(text.getId())
+                        .rsvpTextTitle(text.getTitle())
+                        .rsvpTextContent(text.getContent())
+                        .rsvpQuestions(questions)
+                        .totalCells(totalQuestions)
+                        .build();
+
+                msgForOpponent = MatchFoundMessage.builder()
+                        .type(MATCH_FOUND)
+                        .sessionId(session.getId())
+                        .opponentName(user.getUsername())
+                        .exerciseType("rsvp")
+                        .rsvpSyntagmWidth(finalSyntagmWidth)
+                        .rsvpDisplayTime(finalDisplayTime)
+                        .rsvpTextId(text.getId())
+                        .rsvpTextTitle(text.getTitle())
+                        .rsvpTextContent(text.getContent())
+                        .rsvpQuestions(questions)
+                        .totalCells(totalQuestions)
+                        .build();
+
             } else {
-                // ── Schulte Table exercise (default) ────────────────────────────
                 int finalGrid = Math.min(req.getGridSize(), opponent.getGridSize());
                 int finalFont = Math.max(req.getFontSize(), opponent.getFontSize());
                 String finalExercise = "schulte-table";
@@ -227,6 +295,8 @@ public class MatchmakingDbService {
                 .wpCols(req.getWpCols())
                 .wpTimeLimit(req.getWpTimeLimit())
                 .wpFontSize(req.getWpFontSize())
+                .rsvpSyntagmWidth(req.getRsvpSyntagmWidth())
+                .rsvpDisplayTime(req.getRsvpDisplayTime())
                 .build();
         queueRepository.save(entry);
 

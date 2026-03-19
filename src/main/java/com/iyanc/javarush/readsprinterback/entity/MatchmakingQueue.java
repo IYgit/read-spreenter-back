@@ -51,6 +51,14 @@ public class MatchmakingQueue {
     @Column(name = "wp_font_size", nullable = false)
     private int wpFontSize;
 
+    /** For "rsvp" exercise: number of words per syntagm (1..5) */
+    @Column(name = "rsvp_syntagm_width", nullable = false)
+    private int rsvpSyntagmWidth = 3;
+
+    /** For "rsvp" exercise: display time per syntagm in ms (100..1000) */
+    @Column(name = "rsvp_display_time", nullable = false)
+    private int rsvpDisplayTime = 300;
+
     @Column(name = "joined_at", nullable = false)
     private LocalDateTime joinedAt;
 

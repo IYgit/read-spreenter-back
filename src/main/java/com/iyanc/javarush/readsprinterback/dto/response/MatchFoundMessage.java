@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 /** Sent to BOTH players via /user/queue/duel when a match is found */
 @Data @Builder @NoArgsConstructor @AllArgsConstructor
 public class MatchFoundMessage {
@@ -21,7 +23,7 @@ public class MatchFoundMessage {
     // ── Shared: numbers[] ─────────────────────────────────────────────────────
     /** Schulte: shuffled 1..gridSize²; Numbers: array of 10 random numbers */
     private int[] numbers;
-    private int totalCells;         // Schulte: gridSize²; Numbers: 10; WordPairs: diffCount
+    private int totalCells;         // Schulte: gridSize²; Numbers: 10; WordPairs: diffCount; RSVP: totalQuestions
 
     // ── Numbers exercise ───────────────────────────────────────────────────────
     private int digitCount;         // digits per number
@@ -34,6 +36,14 @@ public class MatchFoundMessage {
     private int wpCols;
     private int wpTimeLimit;        // seconds
     private int wpFontSize;
+
+    // ── RSVP exercise ──────────────────────────────────────────────────────────
+    private Integer rsvpSyntagmWidth;   // words per syntagm
+    private Integer rsvpDisplayTime;    // ms per syntagm
+    private Long    rsvpTextId;
+    private String  rsvpTextTitle;
+    private String  rsvpTextContent;
+    private List<QuestionResponse> rsvpQuestions;
 }
 
 

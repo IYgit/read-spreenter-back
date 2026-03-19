@@ -44,9 +44,19 @@ public class JoinQueueRequest {
     @Min(30) @Max(120)
     private int wpTimeLimit = 60;
 
-    /** Font size in px (12..18) */
+    /** For "word-pairs" exercise: font size in px (12..18) */
     @Min(12) @Max(18)
     private int wpFontSize = 14;
+
+    // ── RSVP exercise parameters ──────────────────────────────────────────────
+
+    /** Number of words per syntagm (1..5) */
+    @Min(1) @Max(5)
+    private int rsvpSyntagmWidth = 3;
+
+    /** Display time per syntagm in milliseconds (100..1000) */
+    @Min(100) @Max(1000)
+    private int rsvpDisplayTime = 300;
 }
 
 
