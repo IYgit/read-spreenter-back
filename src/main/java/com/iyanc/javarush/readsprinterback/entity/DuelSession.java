@@ -19,18 +19,16 @@ public class DuelSession {
     @Column(name = "exercise_type", nullable = false)
     private String exerciseType;
 
-    @Column(name = "grid_size", nullable = false)
-    private int gridSize;
-
-    @Column(name = "font_size", nullable = false)
-    private int fontSize;
-
-    /** JSON array string, e.g. "[3,17,5,...]" */
-    @Column(name = "numbers_sequence", nullable = false, length = 2048)
-    private String numbersSequence;
-
     @Column(name = "status", nullable = false)
     private String status; // WAITING | COUNTDOWN | ACTIVE | FINISHED
+
+    /**
+     * Exercise-specific parameters (1:1, shared PK).
+     * Always non-null after session creation.
+     * EAGER so DuelDbService can read params without a separate query.
+     */
+    @OneToOne(mappedBy = "session", cascade = CascadeType.ALL, fetch = FetchType.EAGER, optional = false)
+    private DuelSessionParams params;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;

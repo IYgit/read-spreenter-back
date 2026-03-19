@@ -81,11 +81,16 @@ public class MatchmakingDbService {
 
                 session = DuelSession.builder()
                         .exerciseType("numbers")
-                        .gridSize(finalDigitCount)   // reuse gridSize column to store digitCount
-                        .fontSize(finalDisplayTime)  // reuse fontSize column to store displayTime
-                        .numbersSequence(numbersJson)
                         .status("WAITING")
                         .build();
+                DuelSessionParams params = DuelSessionParams.builder()
+                        .session(session)
+                        .totalCells(NUMBERS_TOTAL_ROUNDS)
+                        .digitCount(finalDigitCount)
+                        .displayTimeMs(finalDisplayTime)
+                        .numbersSequenceJson(numbersJson)
+                        .build();
+                session.setParams(params);
                 session = sessionRepository.save(session);
 
                 DuelParticipant p1 = DuelParticipant.builder().session(session).user(user).build();
@@ -131,11 +136,18 @@ public class MatchmakingDbService {
 
                 session = DuelSession.builder()
                         .exerciseType("word-pairs")
-                        .gridSize(finalRows * 10 + finalCols)
-                        .fontSize(finalFontSize)
-                        .numbersSequence(pairsJson)
                         .status("WAITING")
                         .build();
+                DuelSessionParams params = DuelSessionParams.builder()
+                        .session(session)
+                        .totalCells(diffCount)
+                        .wpRows(finalRows)
+                        .wpCols(finalCols)
+                        .wpTimeLimitSec(finalTimeLimit)
+                        .wpFontSize(finalFontSize)
+                        .wordPairsJson(pairsJson)
+                        .build();
+                session.setParams(params);
                 session = sessionRepository.save(session);
 
                 DuelParticipant p1 = DuelParticipant.builder().session(session).user(user).build();
@@ -181,11 +193,16 @@ public class MatchmakingDbService {
 
                 session = DuelSession.builder()
                         .exerciseType("rsvp")
-                        .gridSize((int) text.getId().longValue())
-                        .fontSize(finalDisplayTime)
-                        .numbersSequence(String.valueOf(finalSyntagmWidth))
                         .status("WAITING")
                         .build();
+                DuelSessionParams params = DuelSessionParams.builder()
+                        .session(session)
+                        .totalCells(totalQuestions)
+                        .rsvpTextId(text.getId())
+                        .rsvpSyntagmWidth(finalSyntagmWidth)
+                        .rsvpDisplayTimeMs(finalDisplayTime)
+                        .build();
+                session.setParams(params);
                 session = sessionRepository.save(session);
 
                 DuelParticipant p1 = DuelParticipant.builder().session(session).user(user).build();
@@ -220,11 +237,16 @@ public class MatchmakingDbService {
 
                 session = DuelSession.builder()
                         .exerciseType("schulte-table")
-                        .gridSize(finalGrid)
-                        .fontSize(finalFont)
-                        .numbersSequence(numbersJson)
                         .status("WAITING")
                         .build();
+                DuelSessionParams params = DuelSessionParams.builder()
+                        .session(session)
+                        .totalCells(finalGrid * finalGrid)
+                        .gridSize(finalGrid)
+                        .fontSize(finalFont)
+                        .schulteNumbersJson(numbersJson)
+                        .build();
+                session.setParams(params);
                 session = sessionRepository.save(session);
 
                 DuelParticipant p1 = DuelParticipant.builder().session(session).user(user).build();
