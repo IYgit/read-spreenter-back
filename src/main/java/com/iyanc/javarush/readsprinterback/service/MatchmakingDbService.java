@@ -46,14 +46,6 @@ public class MatchmakingDbService {
     private static final String WORD_SEARCH    = "word-search";
 
     private static final String UKRAINIAN_LETTERS = "абвгґдеєжзиіїйклмнопрстуфхцчшщьюя";
-    private static final String[] WORD_BANK = {
-        "кивати","лопата","трава","музика","книга","сонце",
-        "вікно","школа","дорога","молоко","ліжко","стілець",
-        "ранок","вечір","зірка","берег","камінь","дерево",
-        "квітка","вітер","хмара","місяць","листок","ягода",
-        "робота","ліхтар","площа","ковдра","горіх",
-        "калина","пшениця","вишня","город","полуниця"
-    };
 
     private final MatchmakingQueueRepository queueRepository;
     private final DuelSessionRepository sessionRepository;
@@ -61,6 +53,7 @@ public class MatchmakingDbService {
     private final UserRepository userRepository;
     private final WpDiffPairRepository wpDiffPairRepository;
     private final WpSameWordRepository wpSameWordRepository;
+    private final WsWordBankRepository wsWordBankRepository;
     private final TextRepository textRepository;
 
 
@@ -280,7 +273,7 @@ public class MatchmakingDbService {
 
     /** Generates a word-search grid: places words horizontally in unique random rows. */
     private WordSearchGridData generateWordSearchGrid(int rows, int cols, int wordCount) {
-        List<String> shuffled = new ArrayList<>(List.of(WORD_BANK));
+        List<String> shuffled = new ArrayList<>(wsWordBankRepository.findAllWords());
         Collections.shuffle(shuffled, RANDOM);
         List<String> fitting = shuffled.stream()
                 .filter(w -> w.length() <= cols)
