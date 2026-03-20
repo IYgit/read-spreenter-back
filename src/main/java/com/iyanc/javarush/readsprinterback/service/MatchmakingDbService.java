@@ -9,6 +9,7 @@ import com.iyanc.javarush.readsprinterback.dto.request.NumbersQueueRequest;
 import com.iyanc.javarush.readsprinterback.dto.request.WordPairsQueueRequest;
 import com.iyanc.javarush.readsprinterback.dto.request.RsvpQueueRequest;
 import com.iyanc.javarush.readsprinterback.dto.request.WordSearchQueueRequest;
+import com.iyanc.javarush.readsprinterback.dto.request.SyntagmQueueRequest;
 import com.iyanc.javarush.readsprinterback.dto.response.MatchFoundMessage;
 import com.iyanc.javarush.readsprinterback.dto.response.WsWordPosition;
 import com.iyanc.javarush.readsprinterback.dto.response.QuestionResponse;
@@ -44,6 +45,7 @@ public class MatchmakingDbService {
     private static final String SCHULTE_TABLE  = "schulte-table";
     private static final String WORD_PAIRS     = "word-pairs";
     private static final String WORD_SEARCH    = "word-search";
+    private static final String SYNTAGM        = "syntagm-reading";
 
     private static final String UKRAINIAN_LETTERS = "абвгґдеєжзиіїйклмнопрстуфхцчшщьюя";
 
@@ -96,6 +98,8 @@ public class MatchmakingDbService {
             return buildRsvpMatch(user, opponent, rr);
         } else if (req instanceof WordSearchQueueRequest ws) {
             return buildWordSearchMatch(user, opponent, ws);
+        } else if (req instanceof SyntagmQueueRequest sr) {
+            return buildSyntagmMatch(user, opponent, sr);
         } else {
             SchulteQueueRequest sr = req instanceof SchulteQueueRequest s ? s : new SchulteQueueRequest();
             return buildSchulteMatch(user, opponent, sr);
@@ -193,6 +197,41 @@ public class MatchmakingDbService {
         MatchFoundMessage msgForOpponent = MatchFoundMessage.builder()
                 .type(MATCH_FOUND).sessionId(session.getId())
                 .opponentName(user.getUsername()).exerciseType("rsvp")
+                .rsvpSyntagmWidth(finalSyntagmWidth).rsvpDisplayTime(finalDisplayTime)
+                .rsvpTextId(text.getId()).rsvpTextTitle(text.getTitle())
+                .rsvpTextContent(text.getContent()).rsvpQuestions(questions)
+                .totalCells(questions.size())
+                .build();
+
+        return new MatchData(session, msgForUser, msgForOpponent);
+    }
+
+    private MatchData buildSyntagmMatch(User user, MatchmakingQueue opponent, SyntagmQueueRequest req) {
+        int finalSyntagmWidth = Math.min(req.getSyntagmWidth(), opponent.getRsvpSyntagmWidth());
+        int finalDisplayTime  = Math.max(req.getDisplayTime(),  opponent.getRsvpDisplayTime());
+
+        Text text = pickRandomText();
+        List<QuestionResponse> questions = buildQuestionResponses(text);
+
+        DuelSessionParams params = DuelSessionParams.builder()
+                .totalCells(questions.size())
+                .rsvpTextId(text.getId())
+                .rsvpSyntagmWidth(finalSyntagmWidth)
+                .rsvpDisplayTimeMs(finalDisplayTime)
+                .build();
+        DuelSession session = saveSessionWithParticipants(SYNTAGM, params, user, opponent.getUser());
+
+        MatchFoundMessage msgForUser = MatchFoundMessage.builder()
+                .type(MATCH_FOUND).sessionId(session.getId())
+                .opponentName(opponent.getUser().getUsername()).exerciseType(SYNTAGM)
+                .rsvpSyntagmWidth(finalSyntagmWidth).rsvpDisplayTime(finalDisplayTime)
+                .rsvpTextId(text.getId()).rsvpTextTitle(text.getTitle())
+                .rsvpTextContent(text.getContent()).rsvpQuestions(questions)
+                .totalCells(questions.size())
+                .build();
+        MatchFoundMessage msgForOpponent = MatchFoundMessage.builder()
+                .type(MATCH_FOUND).sessionId(session.getId())
+                .opponentName(user.getUsername()).exerciseType(SYNTAGM)
                 .rsvpSyntagmWidth(finalSyntagmWidth).rsvpDisplayTime(finalDisplayTime)
                 .rsvpTextId(text.getId()).rsvpTextTitle(text.getTitle())
                 .rsvpTextContent(text.getContent()).rsvpQuestions(questions)
@@ -407,6 +446,11 @@ public class MatchmakingDbService {
                     .user(user).exerciseType(WORD_SEARCH)
                     .wsRows(ws.getWsRows()).wsCols(ws.getWsCols())
                     .wsWordCount(ws.getWsWordCount()).wsFontSize(ws.getWsFontSize())
+                    .build();
+        } else if (req instanceof SyntagmQueueRequest sr) {
+            entry = MatchmakingQueue.builder()
+                    .user(user).exerciseType(SYNTAGM)
+                    .rsvpSyntagmWidth(sr.getSyntagmWidth()).rsvpDisplayTime(sr.getDisplayTime())
                     .build();
         } else {
             throw new IllegalArgumentException("Unknown exercise type: " + req.getExerciseType());

@@ -18,6 +18,7 @@ import lombok.Setter;
         @JsonSubTypes.Type(value = WordPairsQueueRequest.class,  name = "word-pairs"),
         @JsonSubTypes.Type(value = RsvpQueueRequest.class,       name = "rsvp"),
         @JsonSubTypes.Type(value = WordSearchQueueRequest.class, name = "word-search"),
+        @JsonSubTypes.Type(value = SyntagmQueueRequest.class,   name = "syntagm-reading"),
 })
 @Getter
 @Setter
