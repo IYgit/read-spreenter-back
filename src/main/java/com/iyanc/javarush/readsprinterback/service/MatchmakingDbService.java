@@ -305,59 +305,87 @@ public class MatchmakingDbService {
 
     /** Generates a letter-search grid: random target letters placed 2-4 times each. */
     private LetterSearchGridData generateLetterSearchGrid(int rows, int cols, int letterCount) {
-        // Pick letterCount distinct random target letters
-        List<String> allLetters = new ArrayList<>();
-        for (char ch : UKRAINIAN_LETTERS.toCharArray()) allLetters.add(String.valueOf(ch));
-        Collections.shuffle(allLetters, RANDOM);
-        List<String> targets = new ArrayList<>(allLetters.subList(0, letterCount));
+        List<String> allLetters = shuffledUkrainianLetters();
+        List<String> targets    = new ArrayList<>(allLetters.subList(0, letterCount));
+        List<int[]>  placements = placeTargets(targets, rows * cols);
+        String[][]   grid       = buildLetterGrid(rows, cols, targets, allLetters, placements);
+        return new LetterSearchGridData(grid, targets, placements.size());
+    }
 
-        int totalCells = rows * cols;
+    /** Returns a new list of all Ukrainian letters in a random order. */
+    private List<String> shuffledUkrainianLetters() {
+        List<String> letters = new ArrayList<>();
+        for (char ch : UKRAINIAN_LETTERS.toCharArray()) letters.add(String.valueOf(ch));
+        Collections.shuffle(letters, RANDOM);
+        return letters;
+    }
 
-        // Place 2-4 occurrences of each target at unique random positions
-        List<int[]> placements = new ArrayList<>();
+    /**
+     * Places each target letter 2–4 times at unique random cell indices.
+     * Returns list of {cellIndex, letterIndex} pairs.
+     */
+    private List<int[]> placeTargets(List<String> targets, int totalCells) {
+        List<int[]>  placements  = new ArrayList<>();
         Set<Integer> usedIndices = new HashSet<>();
-
         for (int li = 0; li < targets.size(); li++) {
             int count = 2 + RANDOM.nextInt(3); // 2, 3 or 4
             for (int k = 0; k < count; k++) {
-                int idx;
-                int attempts = 0;
-                do {
-                    idx = RANDOM.nextInt(totalCells);
-                    attempts++;
-                } while (usedIndices.contains(idx) && attempts < totalCells);
-                if (!usedIndices.contains(idx)) {
+                int idx = findUnusedCellIndex(usedIndices, totalCells);
+                if (idx >= 0) {
                     usedIndices.add(idx);
                     placements.add(new int[]{idx, li});
                 }
             }
         }
+        return placements;
+    }
 
-        int totalTargets = placements.size();
+    /**
+     * Picks a random cell index not yet in usedIndices.
+     * Returns -1 if no free index found within totalCells attempts.
+     */
+    private int findUnusedCellIndex(Set<Integer> usedIndices, int totalCells) {
+        int idx;
+        int attempts = 0;
+        do {
+            idx = RANDOM.nextInt(totalCells);
+            attempts++;
+        } while (usedIndices.contains(idx) && attempts < totalCells);
+        return usedIndices.contains(idx) ? -1 : idx;
+    }
 
-        // Build grid
+    /**
+     * Builds the String[][] grid using the pre-computed placements map.
+     * Cells not occupied by a target letter are filled with random non-target letters.
+     */
+    private String[][] buildLetterGrid(int rows, int cols,
+                                       List<String> targets, List<String> allLetters,
+                                       List<int[]> placements) {
+        // Build cellIndex → letter map for O(1) lookup during grid construction
+        Map<Integer, String> targetMap = new HashMap<>();
+        for (int[] p : placements) targetMap.put(p[0], targets.get(p[1]));
+
         String[][] grid = new String[rows][cols];
         int cellIdx = 0;
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
-                final int ci = cellIdx;
-                int[] found = null;
-                for (int[] p : placements) {
-                    if (p[0] == ci) { found = p; break; }
-                }
-                if (found != null) {
-                    grid[r][c] = targets.get(found[1]);
-                } else {
-                    String letter;
-                    do {
-                        letter = allLetters.get(RANDOM.nextInt(allLetters.size()));
-                    } while (targets.contains(letter));
-                    grid[r][c] = letter;
-                }
+                String placed = targetMap.get(cellIdx);
+                grid[r][c] = (placed != null)
+                        ? placed
+                        : randomNonTargetLetter(allLetters, targets);
                 cellIdx++;
             }
         }
-        return new LetterSearchGridData(grid, targets, totalTargets);
+        return grid;
+    }
+
+    /** Returns a random letter from allLetters that is NOT one of the targets. */
+    private String randomNonTargetLetter(List<String> allLetters, List<String> targets) {
+        String letter;
+        do {
+            letter = allLetters.get(RANDOM.nextInt(allLetters.size()));
+        } while (targets.contains(letter));
+        return letter;
     }
 
     private record LetterSearchGridData(String[][] grid, List<String> targetLetters, int totalTargets) {
