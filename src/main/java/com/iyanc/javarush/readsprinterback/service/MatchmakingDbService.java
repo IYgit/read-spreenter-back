@@ -10,6 +10,7 @@ import com.iyanc.javarush.readsprinterback.dto.request.WordPairsQueueRequest;
 import com.iyanc.javarush.readsprinterback.dto.request.RsvpQueueRequest;
 import com.iyanc.javarush.readsprinterback.dto.request.WordSearchQueueRequest;
 import com.iyanc.javarush.readsprinterback.dto.request.SyntagmQueueRequest;
+import com.iyanc.javarush.readsprinterback.dto.request.LetterSearchQueueRequest;
 import com.iyanc.javarush.readsprinterback.dto.response.MatchFoundMessage;
 import com.iyanc.javarush.readsprinterback.dto.response.WsWordPosition;
 import com.iyanc.javarush.readsprinterback.dto.response.QuestionResponse;
@@ -46,8 +47,13 @@ public class MatchmakingDbService {
     private static final String WORD_PAIRS     = "word-pairs";
     private static final String WORD_SEARCH    = "word-search";
     private static final String SYNTAGM        = "syntagm-reading";
+    private static final String LETTER_SEARCH  = "letter-search";
 
     private static final String UKRAINIAN_LETTERS = "абвгґдеєжзиіїйклмнопрстуфхцчшщьюя";
+
+    // Grid size options indexed 0..3 (matches frontend GRID_SIZE_OPTIONS)
+    private static final int[] LS_ROWS = {10, 10, 12, 14};
+    private static final int[] LS_COLS = { 8,  9, 10, 11};
 
     private final MatchmakingQueueRepository queueRepository;
     private final DuelSessionRepository sessionRepository;
@@ -100,6 +106,8 @@ public class MatchmakingDbService {
             return buildWordSearchMatch(user, opponent, ws);
         } else if (req instanceof SyntagmQueueRequest sr) {
             return buildSyntagmMatch(user, opponent, sr);
+        } else if (req instanceof LetterSearchQueueRequest lr) {
+            return buildLetterSearchMatch(user, opponent, lr);
         } else {
             SchulteQueueRequest sr = req instanceof SchulteQueueRequest s ? s : new SchulteQueueRequest();
             return buildSchulteMatch(user, opponent, sr);
@@ -239,6 +247,143 @@ public class MatchmakingDbService {
                 .build();
 
         return new MatchData(session, msgForUser, msgForOpponent);
+    }
+
+    private MatchData buildLetterSearchMatch(User user, MatchmakingQueue opponent,
+                                             LetterSearchQueueRequest req) {
+        // Easier settings win: smaller grid index and fewer letters
+        int finalIdx         = Math.min(req.getGridSizeIdx(), safeInt(opponent.getLsRows(), opponent.getLsCols()));
+        int finalLetterCount = Math.min(req.getLetterCount(), safeIntLs(opponent.getLsLetterCount()));
+
+        int finalRows = LS_ROWS[finalIdx];
+        int finalCols = LS_COLS[finalIdx];
+
+        LetterSearchGridData gridData = generateLetterSearchGrid(finalRows, finalCols, finalLetterCount);
+        int totalTargets = gridData.totalTargets();
+
+        DuelSessionParams params = DuelSessionParams.builder()
+                .totalCells(totalTargets)
+                .lsRows(finalRows).lsCols(finalCols)
+                .lsLetterCount(finalLetterCount)
+                .lsTargetLettersJson(toJsonObject(gridData.targetLetters()))
+                .lsGridJson(toJsonObject(gridData.grid()))
+                .build();
+        DuelSession session = saveSessionWithParticipants(LETTER_SEARCH, params, user, opponent.getUser());
+
+        String[]   lsTargets = gridData.targetLetters().toArray(new String[0]);
+
+        MatchFoundMessage msgForUser = MatchFoundMessage.builder()
+                .type(MATCH_FOUND).sessionId(session.getId())
+                .opponentName(opponent.getUser().getUsername()).exerciseType(LETTER_SEARCH)
+                .lsGrid(gridData.grid()).lsTargetLetters(lsTargets)
+                .lsRows(finalRows).lsCols(finalCols).lsLetterCount(finalLetterCount)
+                .totalCells(totalTargets)
+                .build();
+        MatchFoundMessage msgForOpponent = MatchFoundMessage.builder()
+                .type(MATCH_FOUND).sessionId(session.getId())
+                .opponentName(user.getUsername()).exerciseType(LETTER_SEARCH)
+                .lsGrid(gridData.grid()).lsTargetLetters(lsTargets)
+                .lsRows(finalRows).lsCols(finalCols).lsLetterCount(finalLetterCount)
+                .totalCells(totalTargets)
+                .build();
+
+        return new MatchData(session, msgForUser, msgForOpponent);
+    }
+
+    /** Resolves grid size index from stored lsRows/lsCols in opponent queue entry. */
+    private int safeInt(Integer lsRows, Integer lsCols) {
+        if (lsRows == null || lsCols == null) return 1; // default index
+        for (int i = 0; i < LS_ROWS.length; i++) {
+            if (LS_ROWS[i] == lsRows && LS_COLS[i] == lsCols) return i;
+        }
+        return 1;
+    }
+
+    private int safeIntLs(Integer val) {
+        return val != null ? val : 2; // default letterCount
+    }
+
+    /** Generates a letter-search grid: random target letters placed 2-4 times each. */
+    private LetterSearchGridData generateLetterSearchGrid(int rows, int cols, int letterCount) {
+        // Pick letterCount distinct random target letters
+        List<String> allLetters = new ArrayList<>();
+        for (char ch : UKRAINIAN_LETTERS.toCharArray()) allLetters.add(String.valueOf(ch));
+        Collections.shuffle(allLetters, RANDOM);
+        List<String> targets = new ArrayList<>(allLetters.subList(0, letterCount));
+
+        int totalCells = rows * cols;
+
+        // Place 2-4 occurrences of each target at unique random positions
+        List<int[]> placements = new ArrayList<>();
+        Set<Integer> usedIndices = new HashSet<>();
+
+        for (int li = 0; li < targets.size(); li++) {
+            int count = 2 + RANDOM.nextInt(3); // 2, 3 or 4
+            for (int k = 0; k < count; k++) {
+                int idx;
+                int attempts = 0;
+                do {
+                    idx = RANDOM.nextInt(totalCells);
+                    attempts++;
+                } while (usedIndices.contains(idx) && attempts < totalCells);
+                if (!usedIndices.contains(idx)) {
+                    usedIndices.add(idx);
+                    placements.add(new int[]{idx, li});
+                }
+            }
+        }
+
+        int totalTargets = placements.size();
+
+        // Build grid
+        String[][] grid = new String[rows][cols];
+        int cellIdx = 0;
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                final int ci = cellIdx;
+                int[] found = null;
+                for (int[] p : placements) {
+                    if (p[0] == ci) { found = p; break; }
+                }
+                if (found != null) {
+                    grid[r][c] = targets.get(found[1]);
+                } else {
+                    String letter;
+                    do {
+                        letter = allLetters.get(RANDOM.nextInt(allLetters.size()));
+                    } while (targets.contains(letter));
+                    grid[r][c] = letter;
+                }
+                cellIdx++;
+            }
+        }
+        return new LetterSearchGridData(grid, targets, totalTargets);
+    }
+
+    private record LetterSearchGridData(String[][] grid, List<String> targetLetters, int totalTargets) {
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (!(o instanceof LetterSearchGridData other)) return false;
+            return this.totalTargets == other.totalTargets
+                    && java.util.Arrays.deepEquals(this.grid, other.grid)
+                    && java.util.Objects.equals(this.targetLetters, other.targetLetters);
+        }
+
+        @Override
+        public int hashCode() {
+            int result = java.util.Arrays.deepHashCode(grid);
+            result = 31 * result + java.util.Objects.hashCode(targetLetters);
+            result = 31 * result + totalTargets;
+            return result;
+        }
+
+        @Override
+        public String toString() {
+            return "LetterSearchGridData[grid=" + java.util.Arrays.deepToString(grid)
+                    + ", targetLetters=" + targetLetters
+                    + ", totalTargets=" + totalTargets + "]";
+        }
     }
 
     private MatchData buildSchulteMatch(User user, MatchmakingQueue opponent, SchulteQueueRequest req) {
@@ -451,6 +596,13 @@ public class MatchmakingDbService {
             entry = MatchmakingQueue.builder()
                     .user(user).exerciseType(SYNTAGM)
                     .rsvpSyntagmWidth(sr.getSyntagmWidth()).rsvpDisplayTime(sr.getDisplayTime())
+                    .build();
+        } else if (req instanceof LetterSearchQueueRequest lr) {
+            int idx = Math.min(Math.max(lr.getGridSizeIdx(), 0), LS_ROWS.length - 1);
+            entry = MatchmakingQueue.builder()
+                    .user(user).exerciseType(LETTER_SEARCH)
+                    .lsRows(LS_ROWS[idx]).lsCols(LS_COLS[idx])
+                    .lsLetterCount(lr.getLetterCount())
                     .build();
         } else {
             throw new IllegalArgumentException("Unknown exercise type: " + req.getExerciseType());

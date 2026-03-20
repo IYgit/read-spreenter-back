@@ -122,4 +122,23 @@ public class DuelSessionParams {
     /** JSON array of {word, row, startCol} for client-side highlight */
     @Column(name = "ws_positions_json", length = 2048)
     private String wsPositionsJson;
+
+    // ── letter-search ─────────────────────────────────────────────────────────
+
+    @Column(name = "ls_rows")
+    private Integer lsRows;
+
+    @Column(name = "ls_cols")
+    private Integer lsCols;
+
+    @Column(name = "ls_letter_count")
+    private Integer lsLetterCount;
+
+    /** JSON array of target letters, e.g. ["а","з","м"] */
+    @Column(name = "ls_target_letters_json", columnDefinition = "TEXT")
+    private String lsTargetLettersJson;
+
+    /** JSON 2D array of single-char strings, e.g. [["а","з",...], ...] */
+    @Column(name = "ls_grid_json", columnDefinition = "TEXT")
+    private String lsGridJson;
 }

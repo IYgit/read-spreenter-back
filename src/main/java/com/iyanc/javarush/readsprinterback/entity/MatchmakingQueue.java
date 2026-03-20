@@ -73,6 +73,17 @@ public class MatchmakingQueue {
     @Column(name = "ws_font_size")
     private Integer wsFontSize;
 
+    // ── Letter Search ─────────────────────────────────────────────────────────
+
+    @Column(name = "ls_rows")
+    private Integer lsRows;
+
+    @Column(name = "ls_cols")
+    private Integer lsCols;
+
+    @Column(name = "ls_letter_count")
+    private Integer lsLetterCount;
+
     @Column(name = "joined_at", nullable = false)
     private LocalDateTime joinedAt;
 

@@ -53,4 +53,11 @@ public class MatchFoundMessage {
     private Integer            wsCols;
     private Integer            wsWordCount;
     private Integer            wsFontSize;
+
+    // ── Letter Search exercise ─────────────────────────────────────────────────
+    private String[][] lsGrid;          // 2D letter grid (same for both)
+    private String[]   lsTargetLetters; // letters to find
+    private Integer    lsRows;
+    private Integer    lsCols;
+    private Integer    lsLetterCount;
 }
