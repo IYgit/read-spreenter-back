@@ -11,7 +11,11 @@ export function register(username, email, password) {
   const res = http.post(
     `${BASE_URL}/api/auth/register`,
     JSON.stringify({ username, email, password }),
-    { headers: { 'Content-Type': 'application/json' } }
+    {
+      headers: { 'Content-Type': 'application/json' },
+      // Позначаємо 201 і 409 як очікувані → не потраплять у http_req_failed
+      responseCallback: http.expectedStatuses(201, 409),
+    }
   );
   // 201 = created, 409 = already exists (ok for repeated test runs)
   check(res, { 'register: 201 or 409': (r) => r.status === 201 || r.status === 409 });

@@ -54,8 +54,9 @@ export default function ({ users }) {
 
   // ── Сценарій: читання та вправи ──────────────────────────────────────────
 
-  // 1. Список текстів (публічний)
+  // 1. Список текстів
   let res = http.get(`${BASE_URL}/api/texts`, {
+    headers,
     tags: { endpoint: 'texts' },
   });
   check(res, { '[texts] 200': (r) => r.status === 200 });
@@ -66,6 +67,7 @@ export default function ({ users }) {
   if (texts && texts.length > 0) {
     const textId = texts[0].id;
     res = http.get(`${BASE_URL}/api/texts/${textId}`, {
+      headers,
       tags: { endpoint: 'texts' },
     });
     check(res, { '[texts/:id] 200': (r) => r.status === 200 });

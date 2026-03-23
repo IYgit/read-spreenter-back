@@ -55,7 +55,7 @@ export default function ({ users }) {
   // Акцент на найнавантаженіших ендпоїнтах
   const requests = [
     // Пакетний запит (batch) — паралельно
-    ['GET', `${BASE_URL}/api/texts`,                    null,    {}],
+    ['GET', `${BASE_URL}/api/texts`,                    null,    { headers }],
     ['GET', `${BASE_URL}/api/word-pairs?rows=6&cols=6`, null,    { headers }],
     ['GET', `${BASE_URL}/api/word-search/words`,        null,    { headers }],
   ];

@@ -47,7 +47,7 @@ export default function ({ token }) {
   sleep(0.3);
 
   // 2. GET /api/texts
-  res = http.get(`${BASE_URL}/api/texts`);
+  res = http.get(`${BASE_URL}/api/texts`, { headers });
   check(res, {
     '[texts] status 200': (r) => r.status === 200,
     '[texts] is array':   (r) => Array.isArray(r.json()),
