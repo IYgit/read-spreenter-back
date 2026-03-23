@@ -1,21 +1,30 @@
 package com.iyanc.javarush.readsprinterback.dto.request;
 
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import jakarta.validation.constraints.NotBlank;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
-@Data
-public class JoinQueueRequest {
+@JsonTypeInfo(
+        use     = JsonTypeInfo.Id.NAME,
+        include = JsonTypeInfo.As.EXISTING_PROPERTY,
+        property = "exerciseType",
+        visible  = true
+)
+@JsonSubTypes({
+        @JsonSubTypes.Type(value = SchulteQueueRequest.class,    name = "schulte-table"),
+        @JsonSubTypes.Type(value = NumbersQueueRequest.class,    name = "numbers"),
+        @JsonSubTypes.Type(value = WordPairsQueueRequest.class,  name = "word-pairs"),
+        @JsonSubTypes.Type(value = RsvpQueueRequest.class,       name = "rsvp"),
+        @JsonSubTypes.Type(value = WordSearchQueueRequest.class,    name = "word-search"),
+        @JsonSubTypes.Type(value = SyntagmQueueRequest.class,       name = "syntagm-reading"),
+        @JsonSubTypes.Type(value = LetterSearchQueueRequest.class,  name = "letter-search"),
+})
+@Getter
+@Setter
+public abstract class JoinQueueRequest {
 
-    /** "schulte-table" or "any" */
     @NotBlank
     private String exerciseType;
-
-    @Min(3) @Max(7)
-    private int gridSize = 5;
-
-    @Min(12) @Max(40)
-    private int fontSize = 20;
 }
-

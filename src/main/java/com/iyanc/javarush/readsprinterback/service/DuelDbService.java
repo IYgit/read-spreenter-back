@@ -74,7 +74,7 @@ public class DuelDbService {
                     .type("OPPONENT_PROGRESS")
                     .opponentName(user.getUsername())
                     .opponentProgress(msg.getProgress())
-                    .totalCells(session.getGridSize() * session.getGridSize())
+                    .totalCells(session.getParams().getTotalCells())
                     .build();
             return new ProgressResult(opponent.getUser().getEmail(), event);
         });
@@ -110,6 +110,7 @@ public class DuelDbService {
                     .opponentDurationMs(msg.getDurationMs())
                     .opponentErrors(msg.getErrors())
                     .opponentScore(msg.getScore())
+                    .opponentProgress(msg.getProgress())
                     .build();
         }
 
@@ -187,7 +188,7 @@ public class DuelDbService {
                 .errors(p.getErrors())
                 .score(p.getScore() != null ? p.getScore() : 0)
                 .progress(p.getProgress())
-                .totalCells(session.getGridSize() * session.getGridSize())
+                .totalCells(session.getParams().getTotalCells())
                 .finished(p.isFinished())
                 .disconnected(p.isDisconnected())
                 .build();

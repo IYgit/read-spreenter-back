@@ -21,11 +21,68 @@ public class MatchmakingQueue {
     @Column(name = "exercise_type", nullable = false)
     private String exerciseType;
 
-    @Column(name = "grid_size", nullable = false)
-    private int gridSize;
+    // ── Schulte Table ─────────────────────────────────────────────────────────
 
-    @Column(name = "font_size", nullable = false)
-    private int fontSize;
+    @Column(name = "grid_size")
+    private Integer gridSize;
+
+    @Column(name = "font_size")
+    private Integer fontSize;
+
+    // ── Numbers ───────────────────────────────────────────────────────────────
+
+    @Column(name = "digit_count")
+    private Integer digitCount;
+
+    @Column(name = "display_time")
+    private Integer displayTime;
+
+    // ── Word Pairs ────────────────────────────────────────────────────────────
+
+    @Column(name = "wp_rows")
+    private Integer wpRows;
+
+    @Column(name = "wp_cols")
+    private Integer wpCols;
+
+    @Column(name = "wp_time_limit")
+    private Integer wpTimeLimit;
+
+    @Column(name = "wp_font_size")
+    private Integer wpFontSize;
+
+    // ── RSVP ──────────────────────────────────────────────────────────────────
+
+    @Column(name = "rsvp_syntagm_width")
+    private Integer rsvpSyntagmWidth;
+
+    @Column(name = "rsvp_display_time")
+    private Integer rsvpDisplayTime;
+
+    // ── Word Search ───────────────────────────────────────────────────────────
+
+    @Column(name = "ws_rows")
+    private Integer wsRows;
+
+    @Column(name = "ws_cols")
+    private Integer wsCols;
+
+    @Column(name = "ws_word_count")
+    private Integer wsWordCount;
+
+    @Column(name = "ws_font_size")
+    private Integer wsFontSize;
+
+    // ── Letter Search ─────────────────────────────────────────────────────────
+
+    @Column(name = "ls_rows")
+    private Integer lsRows;
+
+    @Column(name = "ls_cols")
+    private Integer lsCols;
+
+    @Column(name = "ls_letter_count")
+    private Integer lsLetterCount;
 
     @Column(name = "joined_at", nullable = false)
     private LocalDateTime joinedAt;
@@ -35,4 +92,3 @@ public class MatchmakingQueue {
         if (joinedAt == null) joinedAt = LocalDateTime.now();
     }
 }
-
