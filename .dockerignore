@@ -1,0 +1,9 @@
+target/
+**/.idea/
+**/.git/
+speed-reader-front/node_modules/
+speed-reader-front/dist/
+*.md
+.env
+.env.*
+

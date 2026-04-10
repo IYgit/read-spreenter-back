@@ -1,5 +1,6 @@
 package com.iyanc.javarush.readsprinterback.exception;
 
+import io.jsonwebtoken.JwtException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -30,6 +31,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleBadCredentials(BadCredentialsException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(new ErrorResponse(HttpStatus.UNAUTHORIZED.value(), "Invalid email or password"));
+    }
+
+    @ExceptionHandler(JwtException.class)
+    public ResponseEntity<ErrorResponse> handleJwtException(JwtException ex) {
+        log.warn("JWT token invalid or expired: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(new ErrorResponse(HttpStatus.UNAUTHORIZED.value(), "Invalid or expired token"));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
