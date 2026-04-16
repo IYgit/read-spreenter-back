@@ -13,8 +13,8 @@ public class NumbersQueueRequest extends JoinQueueRequest {
     @Min(3) @Max(8)
     private int digitCount = 3;
 
-    /** Number display time in milliseconds (5..1000) */
-    @Min(5) @Max(1000)
+    /** Number display time in milliseconds (20..1000) */
+    @Min(20) @Max(1000)
     private int displayTime = 1000;
 }
 
