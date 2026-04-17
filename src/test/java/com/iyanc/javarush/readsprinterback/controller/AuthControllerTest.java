@@ -34,6 +34,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -249,15 +250,15 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.status").value(403));
     }
 
-    // ─── 9.10 GET /api/auth/verify — валідний токен → 200 ────────────────────
+    // ─── 9.10 GET /api/auth/verify — валідний токен → 302 redirect ────────────
 
     @Test
-    @DisplayName("9.10 GET /api/auth/verify — валідний токен → статус 200, message")
-    void verify_validToken_returns200() throws Exception {
+    @DisplayName("9.10 GET /api/auth/verify — валідний токен → 302 redirect до фронтенду")
+    void verify_validToken_returns302() throws Exception {
         doNothing().when(authService).verifyEmail(any());
 
         mockMvc.perform(get("/api/auth/verify").param("token", "valid-uuid-token"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message").exists());
+                .andExpect(status().isFound())
+                .andExpect(header().string("Location", org.hamcrest.Matchers.containsString("/auth?verified=true")));
     }
 }

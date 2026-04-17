@@ -10,12 +10,15 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
 import java.util.Map;
 
 @RestController
@@ -25,6 +28,9 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
@@ -37,9 +43,12 @@ public class AuthController {
 
     @GetMapping("/verify")
     @Operation(summary = "Verify email address using token from email link")
-    public ResponseEntity<Map<String, String>> verify(@RequestParam String token) {
+    public ResponseEntity<Void> verify(@RequestParam String token) {
         authService.verifyEmail(token);
-        return ResponseEntity.ok(Map.of("message", "Email verified successfully. You can now log in."));
+        URI redirectUri = URI.create(frontendUrl + "/auth?verified=true");
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, redirectUri.toString())
+                .build();
     }
 
     @PostMapping("/login")
