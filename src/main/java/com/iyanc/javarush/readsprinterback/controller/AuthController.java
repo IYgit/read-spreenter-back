@@ -16,6 +16,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -26,9 +28,18 @@ public class AuthController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Register a new user")
-    public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
-        return authService.register(request);
+    @Operation(summary = "Register a new user (sends verification email)")
+    public ResponseEntity<Map<String, String>> register(@Valid @RequestBody RegisterRequest request) {
+        authService.register(request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(Map.of("message", "Registration successful. Please check your email to verify your account."));
+    }
+
+    @GetMapping("/verify")
+    @Operation(summary = "Verify email address using token from email link")
+    public ResponseEntity<Map<String, String>> verify(@RequestParam String token) {
+        authService.verifyEmail(token);
+        return ResponseEntity.ok(Map.of("message", "Email verified successfully. You can now log in."));
     }
 
     @PostMapping("/login")
@@ -53,4 +64,3 @@ public class AuthController {
         return ResponseEntity.ok((UserDetails) authentication.getPrincipal());
     }
 }
-

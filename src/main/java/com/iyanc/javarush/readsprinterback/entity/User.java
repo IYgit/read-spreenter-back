@@ -37,6 +37,13 @@ public class User {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column(name = "email_verified", nullable = false)
+    @Builder.Default
+    private boolean emailVerified = false;
+
+    @Column(name = "verification_token", length = 128, unique = true)
+    private String verificationToken;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

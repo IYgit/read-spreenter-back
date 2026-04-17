@@ -7,6 +7,7 @@ import com.iyanc.javarush.readsprinterback.dto.request.RegisterRequest;
 import com.iyanc.javarush.readsprinterback.dto.response.AuthResponse;
 import com.iyanc.javarush.readsprinterback.dto.response.UserResponse;
 import com.iyanc.javarush.readsprinterback.exception.EmailAlreadyExistsException;
+import com.iyanc.javarush.readsprinterback.exception.EmailNotVerifiedException;
 import com.iyanc.javarush.readsprinterback.security.JwtUtil;
 import com.iyanc.javarush.readsprinterback.security.UserDetailsServiceImpl;
 import com.iyanc.javarush.readsprinterback.service.AuthService;
@@ -28,6 +29,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -54,7 +57,8 @@ class AuthControllerTest {
                     .requestMatchers(
                         "/api/auth/register",
                         "/api/auth/login",
-                        "/api/auth/refresh"
+                        "/api/auth/refresh",
+                        "/api/auth/verify"
                     ).permitAll()
                     .anyRequest().authenticated()
                 )
@@ -122,15 +126,15 @@ class AuthControllerTest {
     // ─── 9.1 POST /api/auth/register — валідне тіло → 201 + accessToken ──────
 
     @Test
-    @DisplayName("9.1 POST /api/auth/register — валідне тіло → статус 201, тіло містить accessToken")
-    void register_validRequest_returns201WithAccessToken() throws Exception {
-        when(authService.register(any())).thenReturn(sampleAuthResponse());
+    @DisplayName("9.1 POST /api/auth/register — валідне тіло → статус 201, тіло містить message")
+    void register_validRequest_returns201WithMessage() throws Exception {
+        doNothing().when(authService).register(any());
 
         mockMvc.perform(post(REGISTER_URL)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validRegisterRequest())))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.accessToken").value("access.token.here"));
+                .andExpect(jsonPath("$.message").exists());
     }
 
     // ─── 9.2 POST /api/auth/register — порожній email → 400 ─────────────────
@@ -152,8 +156,8 @@ class AuthControllerTest {
     @Test
     @DisplayName("9.3 POST /api/auth/register — сервіс кидає EmailAlreadyExistsException → статус 409")
     void register_emailAlreadyExists_returns409() throws Exception {
-        when(authService.register(any()))
-                .thenThrow(new EmailAlreadyExistsException("Email already in use"));
+        doThrow(new EmailAlreadyExistsException("Email already in use"))
+                .when(authService).register(any());
 
         mockMvc.perform(post(REGISTER_URL)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -228,5 +232,32 @@ class AuthControllerTest {
     void me_unauthenticated_returns401() throws Exception {
         mockMvc.perform(get(ME_URL))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // ─── 9.9 POST /api/auth/login — email не верифіковано → 403 ─────────────
+
+    @Test
+    @DisplayName("9.9 POST /api/auth/login — email не верифіковано → статус 403")
+    void login_emailNotVerified_returns403() throws Exception {
+        when(authService.login(any()))
+                .thenThrow(new EmailNotVerifiedException("Please verify your email before logging in"));
+
+        mockMvc.perform(post(LOGIN_URL)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(validLoginRequest())))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+    }
+
+    // ─── 9.10 GET /api/auth/verify — валідний токен → 200 ────────────────────
+
+    @Test
+    @DisplayName("9.10 GET /api/auth/verify — валідний токен → статус 200, message")
+    void verify_validToken_returns200() throws Exception {
+        doNothing().when(authService).verifyEmail(any());
+
+        mockMvc.perform(get("/api/auth/verify").param("token", "valid-uuid-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").exists());
     }
 }

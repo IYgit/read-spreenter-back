@@ -20,5 +20,4 @@ public class ReadSprinterBackApplication {
 
         SpringApplication.run(ReadSprinterBackApplication.class, args);
     }
-
 }
