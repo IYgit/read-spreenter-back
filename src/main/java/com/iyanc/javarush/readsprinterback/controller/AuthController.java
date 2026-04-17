@@ -10,11 +10,16 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+
+import java.net.URI;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -24,11 +29,26 @@ public class AuthController {
 
     private final AuthService authService;
 
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
+
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Register a new user")
-    public AuthResponse register(@Valid @RequestBody RegisterRequest request) {
-        return authService.register(request);
+    @Operation(summary = "Register a new user (sends verification email)")
+    public ResponseEntity<Map<String, String>> register(@Valid @RequestBody RegisterRequest request) {
+        authService.register(request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(Map.of("message", "Registration successful. Please check your email to verify your account."));
+    }
+
+    @GetMapping("/verify")
+    @Operation(summary = "Verify email address using token from email link")
+    public ResponseEntity<Void> verify(@RequestParam String token) {
+        authService.verifyEmail(token);
+        URI redirectUri = URI.create(frontendUrl + "/auth?verified=true");
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, redirectUri.toString())
+                .build();
     }
 
     @PostMapping("/login")
@@ -53,4 +73,3 @@ public class AuthController {
         return ResponseEntity.ok((UserDetails) authentication.getPrincipal());
     }
 }
-

@@ -6,9 +6,11 @@ import com.iyanc.javarush.readsprinterback.dto.request.RegisterRequest;
 import com.iyanc.javarush.readsprinterback.dto.response.AuthResponse;
 import com.iyanc.javarush.readsprinterback.entity.User;
 import com.iyanc.javarush.readsprinterback.exception.EmailAlreadyExistsException;
+import com.iyanc.javarush.readsprinterback.exception.EmailNotVerifiedException;
 import com.iyanc.javarush.readsprinterback.exception.ResourceNotFoundException;
 import com.iyanc.javarush.readsprinterback.repository.UserRepository;
 import com.iyanc.javarush.readsprinterback.security.JwtUtil;
+import com.iyanc.javarush.readsprinterback.service.EmailService;
 import io.jsonwebtoken.JwtException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -41,6 +43,7 @@ class AuthServiceImplTest {
     @Mock private PasswordEncoder     passwordEncoder;
     @Mock private JwtUtil             jwtUtil;
     @Mock private AuthenticationManager authenticationManager;
+    @Mock private EmailService        emailService;
 
     @InjectMocks
     private AuthServiceImpl authService;
@@ -70,32 +73,24 @@ class AuthServiceImplTest {
                 .email(EMAIL)
                 .passwordHash(HASHED)
                 .role(User.Role.USER)
+                .emailVerified(true)
                 .build();
     }
 
     // ─── register ─────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("2.1 register — новий email + username → AuthResponse з токенами та даними")
-    void register_newUser_returnsAuthResponseWithTokensAndUserData() {
+    @DisplayName("2.1 register — новий email + username → user збережено, email відправлено")
+    void register_newUser_savesUserAndSendsEmail() {
         when(userRepository.existsByEmail(EMAIL)).thenReturn(false);
         when(userRepository.existsByUsername(USERNAME)).thenReturn(false);
         when(passwordEncoder.encode(PASSWORD)).thenReturn(HASHED);
         when(userRepository.save(any(User.class))).thenReturn(persistedUser);
-        when(jwtUtil.generateAccessToken(EMAIL)).thenReturn(A_TOKEN);
-        when(jwtUtil.generateRefreshToken(EMAIL)).thenReturn(R_TOKEN);
 
-        AuthResponse response = authService.register(registerRequest);
+        authService.register(registerRequest);
 
-        assertThat(response.getAccessToken()).isEqualTo(A_TOKEN);
-        assertThat(response.getRefreshToken()).isEqualTo(R_TOKEN);
-        assertThat(response.getUser()).isNotNull();
-        assertThat(response.getUser().getEmail()).isEqualTo(EMAIL);
-        assertThat(response.getUser().getUsername()).isEqualTo(USERNAME);
-        assertThat(response.getUser().getRole()).isEqualTo("USER");
-        // save() return value is discarded in register() — id is populated only after commit,
-        // which does not happen in a unit test without a real DB.
-        assertThat(response.getUser().getId()).isNull();
+        verify(userRepository).save(any(User.class));
+        verify(emailService).sendVerificationEmail(any(User.class));
     }
 
     @Test
@@ -132,8 +127,6 @@ class AuthServiceImplTest {
         when(userRepository.existsByUsername(any())).thenReturn(false);
         when(passwordEncoder.encode(PASSWORD)).thenReturn(HASHED);
         when(userRepository.save(any(User.class))).thenReturn(persistedUser);
-        when(jwtUtil.generateAccessToken(any())).thenReturn(A_TOKEN);
-        when(jwtUtil.generateRefreshToken(any())).thenReturn(R_TOKEN);
 
         authService.register(registerRequest);
 
@@ -147,8 +140,6 @@ class AuthServiceImplTest {
         when(userRepository.existsByUsername(any())).thenReturn(false);
         when(passwordEncoder.encode(PASSWORD)).thenReturn(HASHED);
         when(userRepository.save(any(User.class))).thenReturn(persistedUser);
-        when(jwtUtil.generateAccessToken(any())).thenReturn(A_TOKEN);
-        when(jwtUtil.generateRefreshToken(any())).thenReturn(R_TOKEN);
 
         authService.register(registerRequest);
 
@@ -262,6 +253,49 @@ class AuthServiceImplTest {
         RefreshTokenRequest r = new RefreshTokenRequest();
         r.setRefreshToken(token);
         return r;
+    }
+
+    // ─── login — email not verified ──────────────────────────────────────────
+
+    @Test
+    @DisplayName("2.5b login — email не верифіковано → EmailNotVerifiedException")
+    void login_emailNotVerified_throwsEmailNotVerifiedException() {
+        User unverifiedUser = User.builder()
+                .id(2L).username(USERNAME).email(EMAIL)
+                .passwordHash(HASHED).role(User.Role.USER)
+                .emailVerified(false).build();
+        LoginRequest req = loginRequest(EMAIL, PASSWORD);
+        when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(unverifiedUser));
+
+        assertThatThrownBy(() -> authService.login(req))
+                .isInstanceOf(EmailNotVerifiedException.class);
+    }
+
+    // ─── verifyEmail ──────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("2.10 verifyEmail — валідний токен → emailVerified=true, token=null")
+    void verifyEmail_validToken_setsEmailVerifiedTrue() {
+        User unverifiedUser = User.builder()
+                .id(3L).username(USERNAME).email(EMAIL)
+                .passwordHash(HASHED).role(User.Role.USER)
+                .emailVerified(false).verificationToken("uuid-token").build();
+        when(userRepository.findByVerificationToken("uuid-token")).thenReturn(Optional.of(unverifiedUser));
+
+        authService.verifyEmail("uuid-token");
+
+        assertThat(unverifiedUser.isEmailVerified()).isTrue();
+        assertThat(unverifiedUser.getVerificationToken()).isNull();
+        verify(userRepository).save(unverifiedUser);
+    }
+
+    @Test
+    @DisplayName("2.11 verifyEmail — невалідний токен → ResourceNotFoundException")
+    void verifyEmail_invalidToken_throwsResourceNotFoundException() {
+        when(userRepository.findByVerificationToken("bad-token")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.verifyEmail("bad-token"))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 }
 

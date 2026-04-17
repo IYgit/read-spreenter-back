@@ -3,6 +3,7 @@ package com.iyanc.javarush.readsprinterback.config;
 import com.iyanc.javarush.readsprinterback.security.UserDetailsServiceImpl;
 import com.iyanc.javarush.readsprinterback.security.filter.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -26,6 +27,7 @@ import java.util.List;
 
 import jakarta.servlet.http.HttpServletResponse;
 
+@Slf4j
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
@@ -53,6 +55,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/api/auth/register", "/api/auth/login", "/api/auth/refresh",
+                                "/api/auth/verify",
                                 "/swagger-ui/**", "/swagger-ui.html", "/swagger-ui/index.html",
                                 "/api-docs", "/api-docs/**", "/api-docs.yaml",
                                 "/ws/**"
@@ -65,8 +68,14 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
+        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .toList();
+        log.info(">>> CORS allowed origins ({}): {}", origins.size(), origins);
+
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(Arrays.asList(allowedOrigins.split(",")));
+        config.setAllowedOriginPatterns(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);

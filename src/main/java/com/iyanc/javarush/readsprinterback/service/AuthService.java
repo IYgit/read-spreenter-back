@@ -6,8 +6,9 @@ import com.iyanc.javarush.readsprinterback.dto.request.RegisterRequest;
 import com.iyanc.javarush.readsprinterback.dto.response.AuthResponse;
 
 public interface AuthService {
-    AuthResponse register(RegisterRequest request);
+    void register(RegisterRequest request);
     AuthResponse login(LoginRequest request);
     AuthResponse refresh(RefreshTokenRequest request);
+    void verifyEmail(String token);
 }
 
